@@ -43,11 +43,6 @@ interface TrendData {
 }
 
 export default function App() {
-  // State for API Keys
-  const [kobisKey, setKobisKey] = useState('');
-  const [naverId, setNaverId] = useState('');
-  const [naverSecret, setNaverSecret] = useState('');
-  
   // State for Analysis Conditions
   const [targetDate, setTargetDate] = useState(format(subDays(new Date(), 1), 'yyyy-MM-dd'));
   const [keyword, setKeyword] = useState('AI');
@@ -134,19 +129,18 @@ export default function App() {
 
   // Fetch KOBIS Box Office
   const fetchBoxOffice = async () => {
-    if (!kobisKey) return;
     setLoading(prev => ({ ...prev, kobis: true }));
     setError(prev => ({ ...prev, kobis: '' }));
     
     try {
       const dtStr = targetDate.replace(/-/g, '');
-      const response = await fetch(`/api/kobis?key=${kobisKey}&targetDt=${dtStr}`);
+      const response = await fetch(`/api/kobis?targetDt=${dtStr}`);
       const data = await response.json();
       
       if (data.boxOfficeResult?.dailyBoxOfficeList) {
         setMovies(data.boxOfficeResult.dailyBoxOfficeList);
       } else {
-        setError(prev => ({ ...prev, kobis: '데이터를 불러오지 못했습니다. API 키나 날짜를 확인해주세요.' }));
+        setError(prev => ({ ...prev, kobis: '데이터를 불러오지 못했습니다. 서버 설정을 확인해주세요.' }));
       }
     } catch (err) {
       setError(prev => ({ ...prev, kobis: 'KOBIS 연동 중 에러가 발생했습니다.' }));
@@ -157,7 +151,6 @@ export default function App() {
 
   // Fetch Naver Trends
   const fetchNaverTrends = async () => {
-    if (!naverId || !naverSecret) return;
     setLoading(prev => ({ ...prev, naver: true }));
     setError(prev => ({ ...prev, naver: '' }));
     
@@ -175,14 +168,14 @@ export default function App() {
       const response = await fetch('/api/naver', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: naverId, clientSecret: naverSecret, body })
+        body: JSON.stringify({ body })
       });
       
       const data = await response.json();
       if (response.ok && data.results?.[0]?.data) {
         setNaverTrends(data.results[0].data);
       } else {
-        setError(prev => ({ ...prev, naver: '네이버 API 요청 실패 - 키를 확인해주세요.' }));
+        setError(prev => ({ ...prev, naver: '네이버 API 요청 실패 - 서버 설정을 확인해주세요.' }));
       }
     } catch (err) {
       setError(prev => ({ ...prev, naver: '네이버 연동 중 에러가 발생했습니다.' }));
@@ -192,13 +185,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (kobisKey) fetchBoxOffice();
-  }, [targetDate, kobisKey]);
+    fetchBoxOffice();
+  }, [targetDate]);
 
   useEffect(() => {
-    if (naverId && naverSecret) fetchNaverTrends();
+    fetchNaverTrends();
     fetchGoogleInsight(keyword);
-  }, [keyword, naverId, naverSecret]);
+  }, [keyword]);
 
   useEffect(() => {
     fetchTrendingKeywords();
@@ -211,52 +204,12 @@ export default function App() {
         <div className="p-6 border-bottom border-gray-100">
           <div className="flex items-center gap-2 mb-2">
             <Film className="text-indigo-600 w-6 h-6" />
-            <h1 className="text-xl font-bold tracking-tight">Trend Dashboard</h1>
+            <h1 className="text-xl font-bold tracking-tight">Production CEW</h1>
           </div>
           <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold">Director's Toolkit</p>
         </div>
 
         <div className="p-6 space-y-8">
-          {/* API Settings */}
-          <section>
-            <div className="flex items-center gap-2 mb-4 text-gray-700">
-              <Settings className="w-4 h-4" />
-              <h2 className="text-sm font-bold uppercase tracking-wider">API Settings</h2>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">KOBIS API Key</label>
-                <input 
-                  type="password" 
-                  value={kobisKey}
-                  onChange={(e) => setKobisKey(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  placeholder="Enter KOBIS Key"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Naver Client ID</label>
-                <input 
-                  type="password" 
-                  value={naverId}
-                  onChange={(e) => setNaverId(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  placeholder="Enter Naver ID"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Naver Client Secret</label>
-                <input 
-                  type="password" 
-                  value={naverSecret}
-                  onChange={(e) => setNaverSecret(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  placeholder="Enter Naver Secret"
-                />
-              </div>
-            </div>
-          </section>
-
           {/* Analysis Conditions */}
           <section>
             <div className="flex items-center gap-2 mb-4 text-gray-700">
@@ -292,6 +245,7 @@ export default function App() {
 
         <div className="mt-auto p-6 border-t border-gray-100 bg-gray-50">
           <p className="text-[10px] text-gray-400 leading-relaxed">
+            * API 키가 서버에 안전하게 설정되었습니다.<br />
             * 박스오피스 데이터는 전일 기준입니다.<br />
             * 네이버 트렌드는 최근 30일 데이터입니다.
           </p>
@@ -360,12 +314,7 @@ export default function App() {
             </div>
             
             <div className="p-6 flex-1">
-              {!kobisKey ? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-400 space-y-3">
-                  <Info className="w-12 h-12 opacity-20" />
-                  <p className="text-sm">사이드바에 KOBIS API 키를 입력해주세요.</p>
-                </div>
-              ) : loading.kobis ? (
+              {loading.kobis ? (
                 <div className="flex justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
                 </div>
@@ -423,12 +372,7 @@ export default function App() {
             </div>
 
             <div className="p-6 flex-1">
-              {!naverId || !naverSecret ? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-400 space-y-3">
-                  <Info className="w-12 h-12 opacity-20" />
-                  <p className="text-sm">사이드바에 네이버 API 정보를 입력해주세요.</p>
-                </div>
-              ) : loading.naver ? (
+              {loading.naver ? (
                 <div className="flex justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
                 </div>

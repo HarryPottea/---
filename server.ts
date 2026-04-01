@@ -11,13 +11,18 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
+  // API Keys (Hardcoded as requested, but can be overridden by env vars)
+  const KOBIS_KEY = process.env.KOBIS_API_KEY || "57e44523cc7bbb91b7c1fc2fd37b3ca4";
+  const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "Rx0q2Y7SHyMOmmSghFGL";
+  const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "Fb2BDCQKu5";
+
   // KOBIS Proxy
   app.get("/api/kobis", async (req, res) => {
-    const { key, targetDt } = req.query;
+    const { targetDt } = req.query;
     try {
       const response = await axios.get(
         `http://kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json`,
-        { params: { key, targetDt } }
+        { params: { key: KOBIS_KEY, targetDt } }
       );
       res.json(response.data);
     } catch (error: any) {
@@ -27,15 +32,15 @@ async function startServer() {
 
   // Naver DataLab Proxy
   app.post("/api/naver", async (req, res) => {
-    const { clientId, clientSecret, body } = req.body;
+    const { body } = req.body;
     try {
       const response = await axios.post(
         "https://openapi.naver.com/v1/datalab/search",
         body,
         {
           headers: {
-            "X-Naver-Client-Id": clientId,
-            "X-Naver-Client-Secret": clientSecret,
+            "X-Naver-Client-Id": NAVER_CLIENT_ID,
+            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
             "Content-Type": "application/json",
           },
         }
