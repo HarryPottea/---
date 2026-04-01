@@ -88,7 +88,10 @@ export default function App() {
         data = JSON.parse(text);
       } catch (e) {
         console.error("Gemini Keywords JSON Parse Error. Response text:", text);
-        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+        if (text.includes("<!doctype html>") || text.includes("<html")) {
+          throw new Error("서버에서 HTML 응답이 반환되었습니다. API 경로가 올바르지 않거나 배포 설정에 문제가 있을 수 있습니다.");
+        }
+        throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
       }
 
       if (response.ok && data.text) {
@@ -97,10 +100,11 @@ export default function App() {
           setTrendingKeywords(keywords);
         }
       } else {
-        throw new Error(data.error || `트렌드 키워드 분석 실패 (상태 코드: ${response.status})`);
+        const errorMsg = data.error || `트렌드 키워드 분석 실패 (상태 코드: ${response.status})`;
+        throw new Error(errorMsg);
       }
     } catch (err: any) {
-      setError(prev => ({ ...prev, keywords: `트렌드 키워드 분석 실패: ${err.message}` }));
+      setError(prev => ({ ...prev, keywords: err.message }));
     } finally {
       setLoading(prev => ({ ...prev, keywords: false }));
     }
@@ -131,7 +135,10 @@ export default function App() {
         data = JSON.parse(text);
       } catch (e) {
         console.error("Gemini Insight JSON Parse Error. Response text:", text);
-        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+        if (text.includes("<!doctype html>") || text.includes("<html")) {
+          throw new Error("서버에서 HTML 응답이 반환되었습니다. API 경로가 올바르지 않거나 배포 설정에 문제가 있을 수 있습니다.");
+        }
+        throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
       }
 
       if (response.ok && data.text) {
@@ -146,10 +153,11 @@ export default function App() {
           setGroundingUrls(urls);
         }
       } else {
-        throw new Error(data.error || `구글 트렌드 분석 실패 (상태 코드: ${response.status})`);
+        const errorMsg = data.error || `구글 트렌드 분석 실패 (상태 코드: ${response.status})`;
+        throw new Error(errorMsg);
       }
     } catch (err: any) {
-      setError(prev => ({ ...prev, google: `구글 트렌드 분석 실패: ${err.message}` }));
+      setError(prev => ({ ...prev, google: err.message }));
     } finally {
       setLoading(prev => ({ ...prev, google: false }));
     }

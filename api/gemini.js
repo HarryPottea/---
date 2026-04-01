@@ -6,17 +6,24 @@ export default async function handler(req, res) {
   }
 
   const { prompt, config } = req.body;
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  
+  // Debugging logs for environment variables
+  console.log("GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
+  console.log("GOOGLE_API_KEY exists:", !!process.env.GOOGLE_API_KEY);
 
-  if (!GEMINI_API_KEY) {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+  if (!apiKey) {
     console.error("Gemini API Key missing in environment");
-    return res.status(500).json({ error: 'Gemini API Key is not configured on the server.' });
+    return res.status(500).json({ 
+      error: "Gemini API Key is not configured on the server." 
+    });
   }
 
-  console.log(`Gemini Request: prompt=${prompt.substring(0, 50)}...`);
+  console.log(`Gemini Request: prompt=${prompt?.substring(0, 50)}...`);
 
   try {
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: apiKey });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
