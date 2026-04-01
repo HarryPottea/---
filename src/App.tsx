@@ -12,7 +12,9 @@ import {
   Globe,
   Sparkles,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Menu,
+  X
 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { 
@@ -66,6 +68,7 @@ export default function App() {
     keywords: '',
     google: '' 
   });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Fetch Trending Keywords via Serverless Gemini
   const fetchTrendingKeywords = async () => {
@@ -274,10 +277,27 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex text-[#212529] font-sans">
+    <div className="min-h-screen bg-[#F8F9FA] flex flex-col lg:flex-row text-[#212529] font-sans">
+      {/* Mobile Header */}
+      <div className="lg:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-50 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Film className="text-indigo-600 w-6 h-6" />
+          <h1 className="text-lg font-bold tracking-tight">Production CEW</h1>
+        </div>
+        <button 
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
       {/* Sidebar */}
-      <aside className="w-80 bg-white border-r border-gray-200 flex flex-col sticky top-0 h-screen overflow-y-auto">
-        <div className="p-6 border-bottom border-gray-100">
+      <aside className={cn(
+        "w-full lg:w-80 bg-white border-r border-gray-200 flex flex-col lg:sticky lg:top-0 lg:h-screen overflow-y-auto transition-all duration-300 ease-in-out",
+        isSidebarOpen ? "max-h-[1000px] opacity-100 visible" : "max-h-0 lg:max-h-none opacity-0 lg:opacity-100 invisible lg:visible"
+      )}>
+        <div className="hidden lg:block p-6 border-bottom border-gray-100">
           <div className="flex items-center gap-2 mb-2">
             <Film className="text-indigo-600 w-6 h-6" />
             <h1 className="text-xl font-bold tracking-tight">Production CEW</h1>
@@ -329,15 +349,15 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 max-w-6xl mx-auto space-y-8">
-        <header className="flex justify-between items-end">
+      <main className="flex-1 p-4 sm:p-8 max-w-6xl mx-auto space-y-8 w-full overflow-x-hidden">
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight mb-2">🎬 영화 기획 트렌드 대시보드</h2>
-            <p className="text-gray-500">대중의 관심사와 박스오피스 동향을 한눈에 파악하세요.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">🎬 영화 기획 트렌드 대시보드</h2>
+            <p className="text-sm sm:text-base text-gray-500">대중의 관심사와 박스오피스 동향을 한눈에 파악하세요.</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-mono text-gray-400 uppercase tracking-widest">Last Updated</p>
-            <p className="text-sm font-semibold">{format(new Date(), 'yyyy.MM.dd HH:mm')}</p>
+          <div className="text-left sm:text-right">
+            <p className="text-[10px] font-mono text-gray-400 uppercase tracking-widest">Last Updated</p>
+            <p className="text-xs sm:text-sm font-semibold">{format(new Date(), 'yyyy.MM.dd HH:mm')}</p>
           </div>
         </header>
 
@@ -377,19 +397,19 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Section 1: KOBIS Box Office */}
           <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 rounded-lg">
-                  <BarChart3 className="w-5 h-5 text-indigo-600" />
-                </div>
-                <h3 className="font-bold text-lg">1. 일일 박스오피스</h3>
+          <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-indigo-50 rounded-lg">
+                <BarChart3 className="w-5 h-5 text-indigo-600" />
               </div>
-              <span className="text-xs font-medium px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full">
-                {targetDate}
-              </span>
+              <h3 className="font-bold text-base sm:text-lg">1. 일일 박스오피스</h3>
             </div>
-            
-            <div className="p-6 flex-1">
+            <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full">
+              {targetDate}
+            </span>
+          </div>
+          
+          <div className="p-4 sm:p-6 flex-1">
               {loading.kobis ? (
                 <div className="flex justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
@@ -435,19 +455,19 @@ export default function App() {
 
           {/* Section 2: Naver Trends */}
           <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                </div>
-                <h3 className="font-bold text-lg">2. 네이버 검색 트렌드</h3>
+          <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-green-50 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-green-600" />
               </div>
-              <span className="text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                {keyword}
-              </span>
+              <h3 className="font-bold text-base sm:text-lg">2. 네이버 검색 트렌드</h3>
             </div>
+            <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded-full">
+              {keyword}
+            </span>
+          </div>
 
-            <div className="p-6 flex-1">
+          <div className="p-4 sm:p-6 flex-1">
               {loading.naver ? (
                 <div className="flex justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
@@ -496,15 +516,15 @@ export default function App() {
 
         {/* Section 3: Google Trends Analysis (AI Powered) */}
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+          <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-blue-50 rounded-lg">
                 <Globe className="w-5 h-5 text-blue-600" />
               </div>
-              <h3 className="font-bold text-lg">3. AI 구글 트렌드 인사이트</h3>
+              <h3 className="font-bold text-base sm:text-lg">3. AI 구글 트렌드 인사이트</h3>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
                 Real-time Analysis
               </span>
               <button 
@@ -517,7 +537,7 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
             {loading.google ? (
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
