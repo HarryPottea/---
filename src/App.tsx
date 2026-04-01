@@ -52,6 +52,7 @@ export default function App() {
   const [trendingKeywords, setTrendingKeywords] = useState<string[]>(['AI', '좀비', '로맨스', '1인 가구', '멀티버스']);
   const [googleInsight, setGoogleInsight] = useState<string>('');
   const [groundingUrls, setGroundingUrls] = useState<{title: string, uri: string}[]>([]);
+  const [insightCache, setInsightCache] = useState<Record<string, { text: string, urls: {title: string, uri: string}[] }>>({});
   
   const [loading, setLoading] = useState({ 
     kobis: false, 
@@ -94,7 +95,7 @@ export default function App() {
         throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
       }
 
-      if (response.ok && data.text) {
+      if (response.ok && data.ok && data.text) {
         const keywords = data.text.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
         if (keywords.length > 0) {
           setTrendingKeywords(keywords);
@@ -111,7 +112,15 @@ export default function App() {
   };
 
   // Fetch Google Trends Insight via Serverless Gemini
-  const fetchGoogleInsight = async (targetKeyword: string) => {
+  const fetchGoogleInsight = async (targetKeyword: string, force: boolean = false) => {
+    // Check frontend cache first
+    if (!force && insightCache[targetKeyword]) {
+      setGoogleInsight(insightCache[targetKeyword].text);
+      setGroundingUrls(insightCache[targetKeyword].urls);
+      setError(prev => ({ ...prev, google: '' }));
+      return;
+    }
+
     setLoading(prev => ({ ...prev, google: true }));
     setError(prev => ({ ...prev, google: '' }));
     setGoogleInsight('');
@@ -141,17 +150,26 @@ export default function App() {
         throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
       }
 
-      if (response.ok && data.text) {
-        setGoogleInsight(data.text);
+      if (response.ok && data.ok && data.text) {
+        const resultText = data.text;
+        let urls: {title: string, uri: string}[] = [];
         
         // Extract grounding URLs
         const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks;
         if (chunks) {
-          const urls = chunks
+          urls = chunks
             .filter((c: any) => c.web)
             .map((c: any) => ({ title: c.web!.title || '출처', uri: c.web!.uri }));
-          setGroundingUrls(urls);
         }
+        
+        setGoogleInsight(resultText);
+        setGroundingUrls(urls);
+        
+        // Save to frontend cache
+        setInsightCache(prev => ({
+          ...prev,
+          [targetKeyword]: { text: resultText, urls }
+        }));
       } else {
         const errorMsg = data.error || `구글 트렌드 분석 실패 (상태 코드: ${response.status})`;
         throw new Error(errorMsg);
@@ -485,9 +503,19 @@ export default function App() {
               </div>
               <h3 className="font-bold text-lg">3. AI 구글 트렌드 인사이트</h3>
             </div>
-            <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
-              Real-time Analysis
-            </span>
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                Real-time Analysis
+              </span>
+              <button 
+                onClick={() => fetchGoogleInsight(keyword, true)}
+                disabled={loading.google}
+                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                title="새로고침"
+              >
+                <RefreshCw className={cn("w-4 h-4 text-gray-500", loading.google && "animate-spin")} />
+              </button>
+            </div>
           </div>
           <div className="p-8">
             {loading.google ? (
