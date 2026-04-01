@@ -29,7 +29,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
-import './firebase'; // Import to run connection test
+import { supabase } from './supabase'; // Import to run connection test
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -152,25 +152,25 @@ function Dashboard() {
       const response = await fetch('/api/recommended-keywords');
       const text = await response.text();
       
-      let data;
+      let json;
       try {
-        data = JSON.parse(text);
+        json = JSON.parse(text);
       } catch (e) {
         console.error("Recommended Keywords JSON Parse Error. Response text:", text);
         throw new Error(`서버 응답 파싱 실패: ${text.slice(0, 150)}`);
       }
 
-      if (!response.ok || !data.ok) {
-        const errorMsg = data.error || `추천 키워드 조회 실패 (상태 코드: ${response.status})`;
-        const detail = data.detail ? ` (${data.detail})` : "";
+      if (!response.ok || !json.ok) {
+        const errorMsg = json.error || `추천 키워드 조회 실패 (상태 코드: ${response.status})`;
+        const detail = json.detail ? ` (${json.detail})` : "";
         throw new Error(errorMsg + detail);
       }
 
-      if (data.data) {
-        setRecommendedKeywords(data.data);
-        if (data.data.length > 0 && keyword === 'AI') {
-          setKeyword(data.data[0].keyword);
-        }
+      const keywords = json.data || [];
+      setRecommendedKeywords(keywords);
+      
+      if (keywords.length > 0 && keyword === 'AI') {
+        setKeyword(keywords[0].keyword);
       }
     } catch (err: any) {
       setError(prev => ({ ...prev, keywords: err.message }));
@@ -178,7 +178,6 @@ function Dashboard() {
       setLoading(prev => ({ ...prev, keywords: false }));
     }
   };
-
   // Fetch Google Trends Insight via Serverless Gemini
   const fetchGoogleInsight = async (targetKeyword: string, force: boolean = false) => {
     // Check frontend cache first
@@ -510,7 +509,7 @@ function Dashboard() {
             ) : (
               <div className="text-center py-8 text-gray-400">
                 <Info className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm">추천 키워드 데이터가 없습니다. 상단의 '데이터 수집' 버튼을 눌러주세요.</p>
+                <p className="text-sm">추천 키워드 데이터가 아직 생성되지 않았습니다. 상단의 '데이터 수집' 버튼을 눌러주세요.</p>
               </div>
             )}
           </div>

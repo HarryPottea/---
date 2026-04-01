@@ -1,25 +1,40 @@
-import { db } from './firebase-admin.js';
+import { supabase } from './supabase.js';
 
 const store = {
   // Box Office Data
   async getBoxOffice(date) {
-    if (!db) return null;
+    if (!supabase) return null;
     try {
-      const doc = await db.collection('boxoffice_daily').doc(date).get();
-      return doc.exists ? doc.data().movies : null;
+      const { data, error } = await supabase
+        .from('boxoffice_daily')
+        .select('movies')
+        .eq('date', date)
+        .single();
+      
+      if (error) {
+        if (error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+          console.error("[STORE] getBoxOffice error:", error.message);
+        }
+        return null;
+      }
+      return data ? data.movies : null;
     } catch (e) {
       console.error("[STORE] getBoxOffice error:", e.message);
       return null;
     }
   },
   async setBoxOffice(date, movies) {
-    if (!db) return;
+    if (!supabase) return;
     try {
-      await db.collection('boxoffice_daily').doc(date).set({
-        date,
-        movies,
-        updatedAt: new Date().toISOString()
-      });
+      const { error } = await supabase
+        .from('boxoffice_daily')
+        .upsert({
+          date,
+          movies,
+          updatedAt: new Date().toISOString()
+        }, { onConflict: 'date' });
+      
+      if (error) console.error("[STORE] setBoxOffice error:", error.message);
     } catch (e) {
       console.error("[STORE] setBoxOffice error:", e.message);
     }
@@ -27,22 +42,38 @@ const store = {
 
   // Movie Metadata
   async getMovieMeta(movieNm) {
-    if (!db) return null;
+    if (!supabase) return null;
     try {
-      const doc = await db.collection('movie_meta').doc(movieNm).get();
-      return doc.exists ? doc.data() : null;
+      const { data, error } = await supabase
+        .from('movie_meta')
+        .select('*')
+        .eq('movieNm', movieNm)
+        .single();
+      
+      if (error) {
+        if (error.code !== 'PGRST116') {
+          console.error("[STORE] getMovieMeta error:", error.message);
+        }
+        return null;
+      }
+      return data;
     } catch (e) {
       console.error("[STORE] getMovieMeta error:", e.message);
       return null;
     }
   },
   async setMovieMeta(movieNm, meta) {
-    if (!db) return;
+    if (!supabase) return;
     try {
-      await db.collection('movie_meta').doc(movieNm).set({
-        ...meta,
-        updatedAt: new Date().toISOString()
-      });
+      const { error } = await supabase
+        .from('movie_meta')
+        .upsert({
+          ...meta,
+          movieNm,
+          updatedAt: new Date().toISOString()
+        }, { onConflict: 'movieNm' });
+      
+      if (error) console.error("[STORE] setMovieMeta error:", error.message);
     } catch (e) {
       console.error("[STORE] setMovieMeta error:", e.message);
     }
@@ -50,29 +81,40 @@ const store = {
 
   // Keyword Trends
   async getKeywordTrends(keyword) {
-    if (!db) return [];
+    if (!supabase) return [];
     try {
-      const snapshot = await db.collection('keyword_trends')
-        .where('keyword', '==', keyword)
-        .orderBy('date', 'desc')
-        .limit(30)
-        .get();
-      return snapshot.docs.map(doc => doc.data()).reverse();
+      const { data, error } = await supabase
+        .from('keyword_trends')
+        .select('*')
+        .eq('keyword', keyword)
+        .order('date', { ascending: false })
+        .limit(30);
+      
+      if (error) {
+        console.error("[STORE] getKeywordTrends error:", error.message);
+        return [];
+      }
+      return data ? data.reverse() : [];
     } catch (e) {
       console.error("[STORE] getKeywordTrends error:", e.message);
       return [];
     }
   },
   async setKeywordTrend(keyword, date, ratio) {
-    if (!db) return;
+    if (!supabase) return;
     try {
       const id = `${keyword}_${date}`;
-      await db.collection('keyword_trends').doc(id).set({
-        keyword,
-        date,
-        ratio,
-        updatedAt: new Date().toISOString()
-      });
+      const { error } = await supabase
+        .from('keyword_trends')
+        .upsert({
+          id,
+          keyword,
+          date,
+          ratio,
+          updatedAt: new Date().toISOString()
+        }, { onConflict: 'id' });
+      
+      if (error) console.error("[STORE] setKeywordTrend error:", error.message);
     } catch (e) {
       console.error("[STORE] setKeywordTrend error:", e.message);
     }
@@ -80,30 +122,35 @@ const store = {
 
   // Recommended Keywords
   async getRecommendedKeywords() {
-    if (!db) return [];
+    if (!supabase) return [];
     try {
-      const snapshot = await db.collection('recommended_keywords')
-        .orderBy('recommendationScore', 'desc')
-        .limit(10)
-        .get();
-      return snapshot.docs.map(doc => doc.data());
+      const { data, error } = await supabase
+        .from('recommended_keywords')
+        .select('*')
+        .order('recommendationScore', { ascending: false })
+        .limit(10);
+      
+      if (error) {
+        console.error("[STORE] getRecommendedKeywords error:", error.message);
+        return [];
+      }
+      return data || [];
     } catch (e) {
       console.error("[STORE] getRecommendedKeywords error:", e.message);
       return [];
     }
   },
   async setRecommendedKeywords(keywords) {
-    if (!db) return;
+    if (!supabase) return;
     try {
-      const batch = db.batch();
-      for (const item of keywords) {
-        const ref = db.collection('recommended_keywords').doc(item.keyword);
-        batch.set(ref, {
+      const { error } = await supabase
+        .from('recommended_keywords')
+        .upsert(keywords.map(item => ({
           ...item,
           updatedAt: new Date().toISOString()
-        });
-      }
-      await batch.commit();
+        })), { onConflict: 'keyword' });
+      
+      if (error) console.error("[STORE] setRecommendedKeywords error:", error.message);
     } catch (e) {
       console.error("[STORE] setRecommendedKeywords error:", e.message);
     }
@@ -111,11 +158,22 @@ const store = {
 
   // Gemini Insights Cache
   async getGeminiInsight(keyword) {
-    if (!db) return null;
+    if (!supabase) return null;
     try {
-      const doc = await db.collection('gemini_insights').doc(keyword).get();
-      if (doc.exists) {
-        const data = doc.data();
+      const { data, error } = await supabase
+        .from('gemini_insights')
+        .select('*')
+        .eq('keyword', keyword)
+        .single();
+      
+      if (error) {
+        if (error.code !== 'PGRST116') {
+          console.error("[STORE] getGeminiInsight error:", error.message);
+        }
+        return null;
+      }
+
+      if (data) {
         const updatedAt = new Date(data.updatedAt);
         const now = new Date();
         // Cache for 24 hours
@@ -129,14 +187,18 @@ const store = {
     return null;
   },
   async setGeminiInsight(keyword, insight, urls = []) {
-    if (!db) return;
+    if (!supabase) return;
     try {
-      await db.collection('gemini_insights').doc(keyword).set({
-        keyword,
-        insight,
-        urls,
-        updatedAt: new Date().toISOString()
-      });
+      const { error } = await supabase
+        .from('gemini_insights')
+        .upsert({
+          keyword,
+          insight,
+          urls,
+          updatedAt: new Date().toISOString()
+        }, { onConflict: 'keyword' });
+      
+      if (error) console.error("[STORE] setGeminiInsight error:", error.message);
     } catch (e) {
       console.error("[STORE] setGeminiInsight error:", e.message);
     }

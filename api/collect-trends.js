@@ -17,31 +17,33 @@ function getToday() {
 
 // Recommendation Score Calculation
 function calculateScore(movie, trendData) {
-  const todayScore = Number(movie.audiCnt) / 10000; // Normalized
-  const dayChangeRate = Number(movie.audiChange || 0) / 100; // Normalized
-  const trendScore = trendData ? trendData.ratio / 10 : 0; // Normalized
+  const todayScore = Number(movie.audiCnt) / 5000; // Lowered denominator for higher sensitivity
+  const dayChangeRate = Number(movie.audiChange || 0) / 50; // Lowered denominator
+  const trendScore = trendData ? trendData.ratio / 5 : 0; // Lowered denominator
   
   const score = (todayScore * 0.4) + (dayChangeRate * 0.3) + (trendScore * 0.3);
-  return Math.min(Math.round(score * 10), 100);
+  // Ensure at least some score if it's in top 5
+  const finalScore = Math.max(Math.round(score * 10), 5);
+  return Math.min(finalScore, 100);
 }
 
 // Trend State Determination
 function determineTrendState(movie, trendData) {
   const audiChange = Number(movie.audiChange || 0);
-  if (audiChange > 50) return "급상승";
-  if (audiChange > 10) return "상승 중";
-  if (audiChange < -50) return "하락 중";
-  if (audiChange < -10) return "하락 중";
+  if (audiChange > 30) return "급상승";
+  if (audiChange > 5) return "상승 중";
+  if (audiChange < -30) return "하락 중";
+  if (audiChange < -5) return "하락 중";
   return "유지";
 }
 
 // Reason Text Generation
 function generateReasonText(movie, trendData) {
   const audiChange = Number(movie.audiChange || 0);
-  if (audiChange > 50) return "전일 대비 관객수가 폭발적으로 증가했습니다.";
-  if (audiChange > 10) return "전일 대비 관객수가 상승 흐름을 보이고 있습니다.";
-  if (trendData && trendData.ratio > 50) return "네이버 검색 트렌드에서 높은 관심도를 보이고 있습니다.";
-  return "박스오피스 상위권을 유지하며 안정적인 트렌드를 보이고 있습니다.";
+  if (audiChange > 30) return "전일 대비 관객수가 급격히 증가하며 화제가 되고 있습니다.";
+  if (audiChange > 5) return "전일 대비 관객수가 상승하며 긍정적인 흐름을 보입니다.";
+  if (trendData && trendData.ratio > 30) return "네이버 검색 트렌드에서 높은 관심도를 기록 중입니다.";
+  return "박스오피스 상위권에서 꾸준한 인기를 유지하고 있습니다.";
 }
 
 export default async function handler(req, res) {
@@ -68,6 +70,7 @@ export default async function handler(req, res) {
     }
     
     const boxOfficeList = kobisResult.data.boxOfficeResult?.dailyBoxOfficeList || [];
+    console.log("[COLLECT] boxOfficeList count:", boxOfficeList.length);
     
     // Store in Firestore
     try {
@@ -78,6 +81,8 @@ export default async function handler(req, res) {
 
     // 2. Fetch Naver Trends for top 5 movies
     const recommendations = [];
+    const trends = [];
+
     for (const movie of boxOfficeList.slice(0, 5)) {
       const keyword = movie.movieNm;
       
@@ -107,6 +112,7 @@ export default async function handler(req, res) {
           // Store trend data in Firestore
           if (trendData) {
             await store.setKeywordTrend(keyword, trendData.period, trendData.ratio);
+            trends.push({ keyword, ...trendData });
           }
         }
       } catch (e) {
@@ -117,13 +123,22 @@ export default async function handler(req, res) {
       const state = determineTrendState(movie, trendData);
       const reason = generateReasonText(movie, trendData);
 
-      recommendations.push({
-        keyword,
-        recommendationScore: score,
-        trendState: state,
-        reasonText: reason,
-        sourceSummary: ["kobis-boxoffice", trendData ? "naver-trend" : null].filter(Boolean)
-      });
+      if (score > 0) {
+        recommendations.push({
+          keyword,
+          recommendationScore: score,
+          trendState: state,
+          reasonText: reason,
+          sourceSummary: ["kobis-boxoffice", trendData ? "naver-trend" : null].filter(Boolean),
+          date: today
+        });
+      }
+    }
+
+    console.log("[COLLECT] trends count:", trends.length);
+    console.log("[COLLECT] recommended count:", recommendations.length);
+    if (recommendations.length > 0) {
+      console.log("[COLLECT] sample recommended:", recommendations[0]);
     }
 
     // Store recommendations in Firestore
@@ -133,7 +148,13 @@ export default async function handler(req, res) {
       console.error("[COLLECT] Recommendations Cache error:", cacheError.message);
     }
 
-    return res.status(200).json({ ok: true, message: "Data collected and stored.", data: recommendations });
+    return res.status(200).json({ 
+      ok: true, 
+      message: "Data collected and stored.", 
+      collectedCount: trends.length,
+      recommendedCount: recommendations.length,
+      recommendedSample: recommendations.slice(0, 5)
+    });
   } catch (error) {
     console.error("[COLLECT] Internal API error:", error.message);
     return res.status(500).json({

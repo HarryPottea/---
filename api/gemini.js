@@ -39,6 +39,10 @@ export default async function handler(req, res) {
     // 2. Gemini Call (Pure processing, no cache)
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     console.log("[GEMINI] has API Key:", !!apiKey);
+    if (apiKey) {
+      console.log("[GEMINI] API Key length:", apiKey.length);
+      console.log("[GEMINI] API Key starts with:", apiKey.substring(0, 5));
+    }
 
     if (!apiKey) {
       return res.status(500).json({ 
