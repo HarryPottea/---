@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: boxoffice_daily
+    // Document ID: {date} (YYYYMMDD)
+    // Fields:
+    //   - date: string (required)
+    //   - movies: list (required)
+    //
+    // Collection: movie_meta
+    // Document ID: {movieNm}
+    // Fields:
+    //   - movieNm: string (required)
+    //   - genre: string (optional)
+    //   - actors: list (optional)
+    //
+    // Collection: keyword_trends
+    // Document ID: {keyword}_{date}
+    // Fields:
+    //   - keyword: string (required)
+    //   - date: string (required)
+    //   - ratio: number (required)
+    //
+    // Collection: recommended_keywords
+    // Document ID: {keyword}
+    // Fields:
+    //   - keyword: string (required)
+    //   - recommendationScore: number (required)
+    //   - trendState: string (required)
+    //   - reasonText: string (required)
+    //   - sourceSummary: list (required)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: gemini_insights
+    // Document ID: {keyword}
+    // Fields:
+    //   - keyword: string (required)
+    //   - insight: string (required)
+    //   - urls: list (optional)
+    //   - updatedAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "duscks200665@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidBoxOffice(data) {
+      return data.keys().hasAll(['date', 'movies']) &&
+             data.date is string &&
+             data.movies is list;
+    }
+
+    function isValidMovieMeta(data) {
+      return data.keys().hasAll(['movieNm']) &&
+             data.movieNm is string;
+    }
+
+    function isValidKeywordTrend(data) {
+      return data.keys().hasAll(['keyword', 'date', 'ratio']) &&
+             data.keyword is string &&
+             data.date is string &&
+             data.ratio is number;
+    }
+
+    function isValidRecommendedKeyword(data) {
+      return data.keys().hasAll(['keyword', 'recommendationScore', 'trendState', 'reasonText', 'sourceSummary', 'updatedAt']) &&
+             data.keyword is string &&
+             data.recommendationScore is number &&
+             data.trendState is string &&
+             data.reasonText is string &&
+             data.sourceSummary is list &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidGeminiInsight(data) {
+      return data.keys().hasAll(['keyword', 'insight', 'updatedAt']) &&
+             data.keyword is string &&
+             data.insight is string &&
+             data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /boxoffice_daily/{date} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidBoxOffice(request.resource.data);
+    }
+
+    match /movie_meta/{movieNm} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidMovieMeta(request.resource.data);
+    }
+
+    match /keyword_trends/{trendId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidKeywordTrend(request.resource.data);
+    }
+
+    match /recommended_keywords/{keyword} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidRecommendedKeyword(request.resource.data);
+    }
+
+    match /gemini_insights/{keyword} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidGeminiInsight(request.resource.data);
+    }
+  }
+}

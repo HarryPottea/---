@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Component } from 'react';
 import { 
   Film, 
   TrendingUp, 
@@ -29,6 +29,62 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
+import './firebase'; // Import to run connection test
+
+// Error Boundary Component
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: any;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  props: ErrorBoundaryProps;
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
+
+  static getDerivedStateFromError(error: any): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-red-100">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="w-8 h-8 text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">문제가 발생했습니다</h2>
+            <p className="text-gray-600 mb-6">애플리케이션을 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.</p>
+            <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left overflow-auto max-h-40">
+              <code className="text-xs text-red-500">{this.state.error?.toString()}</code>
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl hover:bg-indigo-700 transition-colors"
+            >
+              새로고침
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // Types
 interface Movie {
@@ -36,6 +92,7 @@ interface Movie {
   movieNm: string;
   audiCnt: string;
   audiAcc: string;
+  genre?: string;
 }
 
 interface TrendData {
@@ -43,7 +100,23 @@ interface TrendData {
   ratio: number;
 }
 
+interface RecommendedKeyword {
+  keyword: string;
+  recommendationScore: number;
+  trendState: string;
+  reasonText: string;
+  sourceSummary: string[];
+}
+
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <Dashboard />
+    </ErrorBoundary>
+  );
+}
+
+function Dashboard() {
   // State for Analysis Conditions
   const [targetDate, setTargetDate] = useState(format(subDays(new Date(), 1), 'yyyy-MM-dd'));
   const [keyword, setKeyword] = useState('AI');
@@ -51,7 +124,7 @@ export default function App() {
   // Data State
   const [movies, setMovies] = useState<Movie[]>([]);
   const [naverTrends, setNaverTrends] = useState<TrendData[]>([]);
-  const [trendingKeywords, setTrendingKeywords] = useState<string[]>(['AI', '좀비', '로맨스', '1인 가구', '멀티버스']);
+  const [recommendedKeywords, setRecommendedKeywords] = useState<RecommendedKeyword[]>([]);
   const [googleInsight, setGoogleInsight] = useState<string>('');
   const [groundingUrls, setGroundingUrls] = useState<{title: string, uri: string}[]>([]);
   const [insightCache, setInsightCache] = useState<Record<string, { text: string, urls: {title: string, uri: string}[], source?: string }>>({});
@@ -71,32 +144,21 @@ export default function App() {
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Fetch Trending Keywords via Serverless Gemini
+  // Fetch Recommended Keywords via Data-Driven API
   const fetchTrendingKeywords = async () => {
     setLoading(prev => ({ ...prev, keywords: true }));
     setError(prev => ({ ...prev, keywords: '' }));
     try {
-      const response = await fetch('/api/gemini?type=trending');
-      
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.error("Gemini Keywords JSON Parse Error. Response text:", text);
-        if (text.includes("<!doctype html>") || text.includes("<html")) {
-          throw new Error("서버에서 HTML 응답이 반환되었습니다. API 경로가 올바르지 않거나 배포 설정에 문제가 있을 수 있습니다.");
-        }
-        throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
-      }
+      const response = await fetch('/api/recommended-keywords');
+      const data = await response.json();
 
-      if (response.ok && data.ok && data.data?.insight) {
-        const keywords = data.data.insight.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
-        if (keywords.length > 0) {
-          setTrendingKeywords(keywords);
+      if (response.ok && data.ok && data.data) {
+        setRecommendedKeywords(data.data);
+        if (data.data.length > 0 && keyword === 'AI') {
+          setKeyword(data.data[0].keyword);
         }
       } else {
-        const errorMsg = data.error || `트렌드 키워드 분석 실패 (상태 코드: ${response.status})`;
+        const errorMsg = data.error || `추천 키워드 조회 실패 (상태 코드: ${response.status})`;
         throw new Error(errorMsg);
       }
     } catch (err: any) {
@@ -264,8 +326,9 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col lg:flex-row text-[#212529] font-sans">
-      {/* Mobile Header */}
+    <div className="min-h-screen bg-[#F8F9FA] flex flex-col text-[#212529] font-sans">
+      <div className="flex flex-col lg:flex-row flex-1 relative">
+        {/* Mobile Header */}
       <div className="lg:hidden bg-white border-b border-gray-200 p-4 sticky top-0 z-50 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Film className="text-indigo-600 w-6 h-6" />
@@ -349,35 +412,85 @@ export default function App() {
         </header>
 
         {/* Trending Keywords Section */}
-        <section className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200">
-          <div className="flex justify-between items-center mb-4">
+        <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-6 bg-indigo-600 text-white flex justify-between items-center">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-indigo-200" />
-              <h3 className="font-bold text-lg">실시간 추천 트렌드 키워드</h3>
+              <h3 className="font-bold text-lg">데이터 기반 추천 트렌드 키워드</h3>
             </div>
-            <button 
-              onClick={fetchTrendingKeywords}
-              disabled={loading.keywords}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={cn("w-4 h-4", loading.keywords && "animate-spin")} />
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {trendingKeywords.map((kw) => (
-              <button
-                key={kw}
-                onClick={() => setKeyword(kw)}
-                className={cn(
-                  "px-4 py-2 rounded-full text-sm font-medium transition-all",
-                  keyword === kw 
-                    ? "bg-white text-indigo-600 shadow-md scale-105" 
-                    : "bg-white/10 hover:bg-white/20 text-white"
-                )}
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={async () => {
+                  setLoading(prev => ({ ...prev, keywords: true }));
+                  await fetch('/api/collect-trends');
+                  await fetchTrendingKeywords();
+                }}
+                disabled={loading.keywords}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-xs font-medium disabled:opacity-50"
               >
-                # {kw}
+                <RefreshCw className={cn("w-3.5 h-3.5", loading.keywords && "animate-spin")} />
+                데이터 수집 및 갱신
               </button>
-            ))}
+            </div>
+          </div>
+          
+          <div className="p-6">
+            {loading.keywords ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              </div>
+            ) : error.keywords ? (
+              <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                {error.keywords}
+              </div>
+            ) : recommendedKeywords.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {recommendedKeywords.map((item) => (
+                  <button
+                    key={item.keyword}
+                    onClick={() => setKeyword(item.keyword)}
+                    className={cn(
+                      "text-left p-4 rounded-xl border transition-all group relative overflow-hidden",
+                      keyword === item.keyword 
+                        ? "border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600 shadow-md" 
+                        : "border-gray-100 hover:border-indigo-200 hover:bg-gray-50"
+                    )}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-bold text-base"># {item.keyword}</span>
+                      <span className={cn(
+                        "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter",
+                        item.trendState === '급상승' ? "bg-red-100 text-red-600" :
+                        item.trendState === '상승 중' ? "bg-orange-100 text-orange-600" :
+                        "bg-gray-100 text-gray-600"
+                      )}>
+                        {item.trendState}
+                      </span>
+                    </div>
+                    <div className="flex items-end justify-between">
+                      <div className="space-y-1">
+                        <p className="text-[11px] text-gray-500 line-clamp-1">{item.reasonText}</p>
+                        <div className="flex gap-1">
+                          {item.sourceSummary.map(s => (
+                            <span key={s} className="text-[9px] bg-gray-200 text-gray-600 px-1 rounded">{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-400 uppercase font-bold leading-none mb-1">Score</p>
+                        <p className="text-xl font-black text-indigo-600 leading-none">{item.recommendationScore}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <Info className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">추천 키워드 데이터가 없습니다. 상단의 '데이터 수집' 버튼을 눌러주세요.</p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -413,6 +526,7 @@ export default function App() {
                       <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
                         <th className="pb-4 pl-2">순위</th>
                         <th className="pb-4">영화제목</th>
+                        <th className="pb-4">장르</th>
                         <th className="pb-4 text-right">당일 관객</th>
                         <th className="pb-4 text-right pr-2">누적 관객</th>
                       </tr>
@@ -431,6 +545,7 @@ export default function App() {
                             </span>
                           </td>
                           <td className="py-4 font-semibold text-sm truncate max-w-[120px] sm:max-w-[150px]">{movie.movieNm}</td>
+                          <td className="py-4 text-xs text-gray-500 truncate max-w-[80px] sm:max-w-[100px]">{movie.genre || '-'}</td>
                           <td className="py-4 text-right text-xs sm:text-sm font-mono">{Number(movie.audiCnt).toLocaleString()}</td>
                           <td className="py-4 text-right text-xs sm:text-sm font-mono pr-2 text-gray-500">{Number(movie.audiAcc).toLocaleString()}</td>
                         </tr>
@@ -581,5 +696,14 @@ export default function App() {
         </section>
       </main>
     </div>
-  );
+
+    <footer className="bg-white border-t border-gray-200 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <p className="text-sm text-gray-500 font-medium">
+          &copy; 2026 Production CEW. All rights reserved.
+        </p>
+      </div>
+    </footer>
+  </div>
+);
 }
