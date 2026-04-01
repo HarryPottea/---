@@ -426,7 +426,8 @@ export default function App() {
                       <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
                         <th className="pb-4 pl-2">순위</th>
                         <th className="pb-4">영화제목</th>
-                        <th className="pb-4 text-right pr-2">관객수</th>
+                        <th className="pb-4 text-right">당일 관객</th>
+                        <th className="pb-4 text-right pr-2">누적 관객</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
@@ -442,8 +443,9 @@ export default function App() {
                               {movie.rank}
                             </span>
                           </td>
-                          <td className="py-4 font-semibold text-sm truncate max-w-[150px]">{movie.movieNm}</td>
-                          <td className="py-4 text-right text-sm font-mono pr-2">{Number(movie.audiCnt).toLocaleString()}</td>
+                          <td className="py-4 font-semibold text-sm truncate max-w-[120px] sm:max-w-[150px]">{movie.movieNm}</td>
+                          <td className="py-4 text-right text-xs sm:text-sm font-mono">{Number(movie.audiCnt).toLocaleString()}</td>
+                          <td className="py-4 text-right text-xs sm:text-sm font-mono pr-2 text-gray-500">{Number(movie.audiAcc).toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
