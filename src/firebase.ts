@@ -1,20 +1,22 @@
-/// <reference types="vite/client" />
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
 
-// Use VITE_ environment variables for client-side Firebase
+// Import the Firebase configuration directly. 
+// This is safe for client-side code bundled by Vite.
+import firebaseAppletConfig from '../firebase-applet-config.json';
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: firebaseAppletConfig.apiKey,
+  authDomain: firebaseAppletConfig.authDomain,
+  projectId: firebaseAppletConfig.projectId,
+  storageBucket: firebaseAppletConfig.storageBucket,
+  messagingSenderId: firebaseAppletConfig.messagingSenderId,
+  appId: firebaseAppletConfig.appId,
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, import.meta.env.VITE_FIREBASE_DATABASE_ID || undefined);
+const db = getFirestore(app, firebaseAppletConfig.firestoreDatabaseId || undefined);
 const auth = getAuth(app);
 
 export { app, db, auth, doc, getDocFromCache, getDocFromServer };
