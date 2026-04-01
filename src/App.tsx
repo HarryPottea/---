@@ -26,7 +26,6 @@ import {
   Legend
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
 import { cn } from './lib/utils';
 
 // Types
@@ -66,53 +65,39 @@ export default function App() {
     keywords: '',
     google: '' 
   });
-  const [geminiKey, setGeminiKey] = useState<string | null>(null);
 
-  // Fetch Config (Gemini Key) from Server
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await fetch('/api/config');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.GEMINI_API_KEY) {
-            setGeminiKey(data.GEMINI_API_KEY);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch config:", err);
-      }
-    };
-    fetchConfig();
-  }, []);
-
-  // Gemini Initialization
-  const ai = React.useMemo(() => {
-    const key = geminiKey || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '');
-    if (!key) return null;
-    return new GoogleGenAI({ apiKey: key });
-  }, [geminiKey]);
-
-  // Fetch Trending Keywords via Gemini
+  // Fetch Trending Keywords via Serverless Gemini
   const fetchTrendingKeywords = async () => {
-    if (!ai) {
-      setError(prev => ({ ...prev, keywords: 'Gemini API 키를 불러오는 중입니다...' }));
-      return;
-    }
     setLoading(prev => ({ ...prev, keywords: true }));
     setError(prev => ({ ...prev, keywords: '' }));
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: "현재 한국에서 영화 기획에 참고할 만한 가장 핫한 트렌드 키워드 8개를 뽑아줘. 콤마(,)로 구분해서 키워드만 출력해줘. 예: 좀비,AI,로맨스,복수",
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: "현재 한국에서 영화 기획에 참고할 만한 가장 핫한 트렌드 키워드 8개를 뽑아줘. 콤마(,)로 구분해서 키워드만 출력해줘. 예: 좀비,AI,로맨스,복수",
+          config: {
+            tools: [{ googleSearch: {} }]
+          }
+        })
       });
-      const text = response.text || '';
-      const keywords = text.split(',').map(k => k.trim()).filter(k => k.length > 0);
-      if (keywords.length > 0) {
-        setTrendingKeywords(keywords);
+      
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("Gemini Keywords JSON Parse Error. Response text:", text);
+        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+      }
+
+      if (response.ok && data.text) {
+        const keywords = data.text.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+        if (keywords.length > 0) {
+          setTrendingKeywords(keywords);
+        }
+      } else {
+        throw new Error(data.error || `트렌드 키워드 분석 실패 (상태 코드: ${response.status})`);
       }
     } catch (err: any) {
       setError(prev => ({ ...prev, keywords: `트렌드 키워드 분석 실패: ${err.message}` }));
@@ -121,35 +106,47 @@ export default function App() {
     }
   };
 
-  // Fetch Google Trends Insight via Gemini Grounding
+  // Fetch Google Trends Insight via Serverless Gemini
   const fetchGoogleInsight = async (targetKeyword: string) => {
-    if (!ai) {
-      setError(prev => ({ ...prev, google: 'Gemini API 키를 불러오는 중입니다...' }));
-      return;
-    }
     setLoading(prev => ({ ...prev, google: true }));
     setError(prev => ({ ...prev, google: '' }));
     setGoogleInsight('');
     setGroundingUrls([]);
     
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `최근 구글 트렌드와 검색 데이터를 바탕으로 '${targetKeyword}'에 대한 대중의 관심도 변화와 특징을 분석해줘. 영화 기획자 관점에서 요약해줘.`,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: `최근 구글 트렌드와 검색 데이터를 바탕으로 '${targetKeyword}'에 대한 대중의 관심도 변화와 특징을 분석해줘. 영화 기획자 관점에서 요약해줘.`,
+          config: {
+            tools: [{ googleSearch: {} }]
+          }
+        })
       });
       
-      setGoogleInsight(response.text || '');
-      
-      // Extract grounding URLs
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks) {
-        const urls = chunks
-          .filter(c => c.web)
-          .map(c => ({ title: c.web!.title || '출처', uri: c.web!.uri }));
-        setGroundingUrls(urls);
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("Gemini Insight JSON Parse Error. Response text:", text);
+        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+      }
+
+      if (response.ok && data.text) {
+        setGoogleInsight(data.text);
+        
+        // Extract grounding URLs
+        const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        if (chunks) {
+          const urls = chunks
+            .filter((c: any) => c.web)
+            .map((c: any) => ({ title: c.web!.title || '출처', uri: c.web!.uri }));
+          setGroundingUrls(urls);
+        }
+      } else {
+        throw new Error(data.error || `구글 트렌드 분석 실패 (상태 코드: ${response.status})`);
       }
     } catch (err: any) {
       setError(prev => ({ ...prev, google: `구글 트렌드 분석 실패: ${err.message}` }));
@@ -242,17 +239,13 @@ export default function App() {
   }, [targetDate]);
 
   useEffect(() => {
-    if (ai) {
-      fetchNaverTrends();
-      fetchGoogleInsight(keyword);
-    }
-  }, [keyword, ai]);
+    fetchNaverTrends();
+    fetchGoogleInsight(keyword);
+  }, [keyword]);
 
   useEffect(() => {
-    if (ai) {
-      fetchTrendingKeywords();
-    }
-  }, [ai]);
+    fetchTrendingKeywords();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex text-[#212529] font-sans">
