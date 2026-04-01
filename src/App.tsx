@@ -72,6 +72,10 @@ export default function App() {
 
   // Fetch Trending Keywords via Gemini
   const fetchTrendingKeywords = async () => {
+    if (!process.env.GEMINI_API_KEY) {
+      setError(prev => ({ ...prev, keywords: 'Gemini API 키가 설정되지 않았습니다. 설정에서 GEMINI_API_KEY를 확인해주세요.' }));
+      return;
+    }
     setLoading(prev => ({ ...prev, keywords: true }));
     setError(prev => ({ ...prev, keywords: '' }));
     try {
@@ -87,8 +91,8 @@ export default function App() {
       if (keywords.length > 0) {
         setTrendingKeywords(keywords);
       }
-    } catch (err) {
-      setError(prev => ({ ...prev, keywords: '트렌드 키워드를 가져오는데 실패했습니다.' }));
+    } catch (err: any) {
+      setError(prev => ({ ...prev, keywords: `트렌드 키워드 분석 실패: ${err.message}` }));
     } finally {
       setLoading(prev => ({ ...prev, keywords: false }));
     }
@@ -96,6 +100,10 @@ export default function App() {
 
   // Fetch Google Trends Insight via Gemini Grounding
   const fetchGoogleInsight = async (targetKeyword: string) => {
+    if (!process.env.GEMINI_API_KEY) {
+      setError(prev => ({ ...prev, google: 'Gemini API 키가 설정되지 않았습니다.' }));
+      return;
+    }
     setLoading(prev => ({ ...prev, google: true }));
     setError(prev => ({ ...prev, google: '' }));
     setGoogleInsight('');
@@ -120,8 +128,8 @@ export default function App() {
           .map(c => ({ title: c.web!.title || '출처', uri: c.web!.uri }));
         setGroundingUrls(urls);
       }
-    } catch (err) {
-      setError(prev => ({ ...prev, google: '구글 트렌드 분석에 실패했습니다.' }));
+    } catch (err: any) {
+      setError(prev => ({ ...prev, google: `구글 트렌드 분석 실패: ${err.message}` }));
     } finally {
       setLoading(prev => ({ ...prev, google: false }));
     }
@@ -137,13 +145,16 @@ export default function App() {
       const response = await fetch(`/api/kobis?targetDt=${dtStr}`);
       const data = await response.json();
       
-      if (data.boxOfficeResult?.dailyBoxOfficeList) {
+      if (response.ok && data.boxOfficeResult?.dailyBoxOfficeList) {
         setMovies(data.boxOfficeResult.dailyBoxOfficeList);
       } else {
-        setError(prev => ({ ...prev, kobis: '데이터를 불러오지 못했습니다. 서버 설정을 확인해주세요.' }));
+        setError(prev => ({ 
+          ...prev, 
+          kobis: data.error || '데이터를 불러오지 못했습니다. 서버 설정을 확인해주세요.' 
+        }));
       }
-    } catch (err) {
-      setError(prev => ({ ...prev, kobis: 'KOBIS 연동 중 에러가 발생했습니다.' }));
+    } catch (err: any) {
+      setError(prev => ({ ...prev, kobis: `KOBIS 연동 중 에러가 발생했습니다: ${err.message}` }));
     } finally {
       setLoading(prev => ({ ...prev, kobis: false }));
     }
@@ -175,10 +186,13 @@ export default function App() {
       if (response.ok && data.results?.[0]?.data) {
         setNaverTrends(data.results[0].data);
       } else {
-        setError(prev => ({ ...prev, naver: '네이버 API 요청 실패 - 서버 설정을 확인해주세요.' }));
+        setError(prev => ({ 
+          ...prev, 
+          naver: data.error || '네이버 API 요청 실패 - 서버 설정을 확인해주세요.' 
+        }));
       }
-    } catch (err) {
-      setError(prev => ({ ...prev, naver: '네이버 연동 중 에러가 발생했습니다.' }));
+    } catch (err: any) {
+      setError(prev => ({ ...prev, naver: `네이버 연동 중 에러가 발생했습니다: ${err.message}` }));
     } finally {
       setLoading(prev => ({ ...prev, naver: false }));
     }

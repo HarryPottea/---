@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import cors from "cors";
 import path from "path";
+import "dotenv/config";
 
 async function startServer() {
   const app = express();
@@ -16,17 +17,21 @@ async function startServer() {
   const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "Rx0q2Y7SHyMOmmSghFGL";
   const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "Fb2BDCQKu5";
 
-  // KOBIS Proxy
+  // KOBIS Proxy (Using HTTPS)
   app.get("/api/kobis", async (req, res) => {
     const { targetDt } = req.query;
     try {
       const response = await axios.get(
-        `http://kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json`,
+        `https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json`,
         { params: { key: KOBIS_KEY, targetDt } }
       );
+      if (response.data.faultInfo) {
+        return res.status(400).json({ error: response.data.faultInfo.message });
+      }
       res.json(response.data);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("KOBIS Error:", error.response?.data || error.message);
+      res.status(500).json({ error: error.response?.data?.error || error.message });
     }
   });
 
@@ -47,7 +52,10 @@ async function startServer() {
       );
       res.json(response.data);
     } catch (error: any) {
-      res.status(error.response?.status || 500).json({ error: error.message });
+      console.error("Naver Error:", error.response?.data || error.message);
+      res.status(error.response?.status || 500).json({ 
+        error: error.response?.data?.errorMessage || error.message 
+      });
     }
   });
 
