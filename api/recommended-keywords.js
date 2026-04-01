@@ -4,14 +4,11 @@ export default async function handler(req, res) {
   console.log("[RECOMMENDED] function started");
   
   try {
-    // Debug GET check
-    if (req.method === "GET" && req.query?.debug === "1") {
+    // Health check
+    if (req.query?.health === "1") {
       return res.status(200).json({
         ok: true,
-        route: "recommended-keywords",
-        debug: {
-          hasStore: !!store
-        }
+        route: "recommended-keywords"
       });
     }
 

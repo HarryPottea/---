@@ -46,6 +46,15 @@ function generateReasonText(movie, trendData) {
 
 export default async function handler(req, res) {
   console.log("[COLLECT] function started");
+  
+  // Health check
+  if (req.query?.health === "1") {
+    return res.status(200).json({
+      ok: true,
+      route: "collect-trends"
+    });
+  }
+
   const targetDt = getYesterday();
   const today = getToday();
 
