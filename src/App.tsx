@@ -54,7 +54,8 @@ export default function App() {
   const [trendingKeywords, setTrendingKeywords] = useState<string[]>(['AI', '좀비', '로맨스', '1인 가구', '멀티버스']);
   const [googleInsight, setGoogleInsight] = useState<string>('');
   const [groundingUrls, setGroundingUrls] = useState<{title: string, uri: string}[]>([]);
-  const [insightCache, setInsightCache] = useState<Record<string, { text: string, urls: {title: string, uri: string}[] }>>({});
+  const [insightCache, setInsightCache] = useState<Record<string, { text: string, urls: {title: string, uri: string}[], source?: string }>>({});
+  const [insightSource, setInsightSource] = useState<string>('');
   
   const [loading, setLoading] = useState({ 
     kobis: false, 
@@ -75,16 +76,7 @@ export default function App() {
     setLoading(prev => ({ ...prev, keywords: true }));
     setError(prev => ({ ...prev, keywords: '' }));
     try {
-      const response = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          prompt: "현재 한국에서 영화 기획에 참고할 만한 가장 핫한 트렌드 키워드 8개를 뽑아줘. 콤마(,)로 구분해서 키워드만 출력해줘. 예: 좀비,AI,로맨스,복수",
-          config: {
-            tools: [{ googleSearch: {} }]
-          }
-        })
-      });
+      const response = await fetch('/api/gemini?type=trending');
       
       const text = await response.text();
       let data;
@@ -98,8 +90,8 @@ export default function App() {
         throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
       }
 
-      if (response.ok && data.ok && data.text) {
-        const keywords = data.text.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+      if (response.ok && data.ok && data.data?.insight) {
+        const keywords = data.data.insight.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
         if (keywords.length > 0) {
           setTrendingKeywords(keywords);
         }
@@ -120,6 +112,7 @@ export default function App() {
     if (!force && insightCache[targetKeyword]) {
       setGoogleInsight(insightCache[targetKeyword].text);
       setGroundingUrls(insightCache[targetKeyword].urls);
+      setInsightSource(insightCache[targetKeyword].source || 'cache');
       setError(prev => ({ ...prev, google: '' }));
       return;
     }
@@ -128,18 +121,10 @@ export default function App() {
     setError(prev => ({ ...prev, google: '' }));
     setGoogleInsight('');
     setGroundingUrls([]);
+    setInsightSource('');
     
     try {
-      const response = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          prompt: `최근 구글 트렌드와 검색 데이터를 바탕으로 '${targetKeyword}'에 대한 대중의 관심도 변화와 특징을 분석해줘. 영화 기획자 관점에서 요약해줘.`,
-          config: {
-            tools: [{ googleSearch: {} }]
-          }
-        })
-      });
+      const response = await fetch(`/api/gemini?keyword=${encodeURIComponent(targetKeyword)}`);
       
       const text = await response.text();
       let data;
@@ -153,12 +138,13 @@ export default function App() {
         throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
       }
 
-      if (response.ok && data.ok && data.text) {
-        const resultText = data.text;
+      if (response.ok && data.ok && data.data?.insight) {
+        const resultText = data.data.insight;
+        const source = data.source || 'gemini';
         let urls: {title: string, uri: string}[] = [];
         
         // Extract grounding URLs
-        const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        const chunks = data.data.candidates?.[0]?.groundingMetadata?.groundingChunks;
         if (chunks) {
           urls = chunks
             .filter((c: any) => c.web)
@@ -167,11 +153,12 @@ export default function App() {
         
         setGoogleInsight(resultText);
         setGroundingUrls(urls);
+        setInsightSource(source);
         
         // Save to frontend cache
         setInsightCache(prev => ({
           ...prev,
-          [targetKeyword]: { text: resultText, urls }
+          [targetKeyword]: { text: resultText, urls, source }
         }));
       } else {
         const errorMsg = data.error || `구글 트렌드 분석 실패 (상태 코드: ${response.status})`;
@@ -526,6 +513,14 @@ export default function App() {
               <h3 className="font-bold text-base sm:text-lg">3. AI 구글 트렌드 인사이트</h3>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
+              {insightSource && (
+                <span className={cn(
+                  "text-[10px] sm:text-xs font-medium px-2 py-1 rounded-full",
+                  insightSource === 'cache' ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
+                )}>
+                  {insightSource === 'cache' ? "오늘 분석 결과" : "새 분석 생성됨"}
+                </span>
+              )}
               <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
                 Real-time Analysis
               </span>
