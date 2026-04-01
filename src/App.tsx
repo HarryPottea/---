@@ -66,14 +66,37 @@ export default function App() {
     keywords: '',
     google: '' 
   });
+  const [geminiKey, setGeminiKey] = useState<string | null>(null);
+
+  // Fetch Config (Gemini Key) from Server
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.GEMINI_API_KEY) {
+            setGeminiKey(data.GEMINI_API_KEY);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch config:", err);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // Gemini Initialization
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  const ai = React.useMemo(() => {
+    const key = geminiKey || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '');
+    if (!key) return null;
+    return new GoogleGenAI({ apiKey: key });
+  }, [geminiKey]);
 
   // Fetch Trending Keywords via Gemini
   const fetchTrendingKeywords = async () => {
-    if (!process.env.GEMINI_API_KEY) {
-      setError(prev => ({ ...prev, keywords: 'Gemini API 키가 설정되지 않았습니다. 설정에서 GEMINI_API_KEY를 확인해주세요.' }));
+    if (!ai) {
+      setError(prev => ({ ...prev, keywords: 'Gemini API 키를 불러오는 중입니다...' }));
       return;
     }
     setLoading(prev => ({ ...prev, keywords: true }));
@@ -100,8 +123,8 @@ export default function App() {
 
   // Fetch Google Trends Insight via Gemini Grounding
   const fetchGoogleInsight = async (targetKeyword: string) => {
-    if (!process.env.GEMINI_API_KEY) {
-      setError(prev => ({ ...prev, google: 'Gemini API 키가 설정되지 않았습니다.' }));
+    if (!ai) {
+      setError(prev => ({ ...prev, google: 'Gemini API 키를 불러오는 중입니다...' }));
       return;
     }
     setLoading(prev => ({ ...prev, google: true }));
@@ -143,14 +166,22 @@ export default function App() {
     try {
       const dtStr = targetDate.replace(/-/g, '');
       const response = await fetch(`/api/kobis?targetDt=${dtStr}`);
-      const data = await response.json();
+      const text = await response.text();
       
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("KOBIS JSON Parse Error. Response text:", text);
+        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+      }
+
       if (response.ok && data.boxOfficeResult?.dailyBoxOfficeList) {
         setMovies(data.boxOfficeResult.dailyBoxOfficeList);
       } else {
         setError(prev => ({ 
           ...prev, 
-          kobis: data.error || '데이터를 불러오지 못했습니다. 서버 설정을 확인해주세요.' 
+          kobis: data.error || `데이터를 불러오지 못했습니다. (상태 코드: ${response.status})` 
         }));
       }
     } catch (err: any) {
@@ -182,13 +213,21 @@ export default function App() {
         body: JSON.stringify({ body })
       });
       
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("Naver JSON Parse Error. Response text:", text);
+        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+      }
+
       if (response.ok && data.results?.[0]?.data) {
         setNaverTrends(data.results[0].data);
       } else {
         setError(prev => ({ 
           ...prev, 
-          naver: data.error || '네이버 API 요청 실패 - 서버 설정을 확인해주세요.' 
+          naver: data.error || `네이버 API 요청 실패 (상태 코드: ${response.status})` 
         }));
       }
     } catch (err: any) {
@@ -203,13 +242,17 @@ export default function App() {
   }, [targetDate]);
 
   useEffect(() => {
-    fetchNaverTrends();
-    fetchGoogleInsight(keyword);
-  }, [keyword]);
+    if (ai) {
+      fetchNaverTrends();
+      fetchGoogleInsight(keyword);
+    }
+  }, [keyword, ai]);
 
   useEffect(() => {
-    fetchTrendingKeywords();
-  }, []);
+    if (ai) {
+      fetchTrendingKeywords();
+    }
+  }, [ai]);
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex text-[#212529] font-sans">

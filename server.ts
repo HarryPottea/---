@@ -12,10 +12,29 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
+  // Request Logging Middleware
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+  });
+
   // API Keys (Hardcoded as requested, but can be overridden by env vars)
   const KOBIS_KEY = process.env.KOBIS_API_KEY || "57e44523cc7bbb91b7c1fc2fd37b3ca4";
   const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "Rx0q2Y7SHyMOmmSghFGL";
   const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "Fb2BDCQKu5";
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+
+  console.log("Server initialized with keys:");
+  console.log("- KOBIS_KEY:", KOBIS_KEY ? "Set" : "Missing");
+  console.log("- NAVER_CLIENT_ID:", NAVER_CLIENT_ID ? "Set" : "Missing");
+  console.log("- GEMINI_API_KEY:", GEMINI_API_KEY ? "Set" : "Missing");
+
+  // Config endpoint for the frontend
+  app.get("/api/config", (req, res) => {
+    res.json({
+      GEMINI_API_KEY: GEMINI_API_KEY,
+    });
+  });
 
   // KOBIS Proxy (Using HTTPS)
   app.get("/api/kobis", async (req, res) => {
