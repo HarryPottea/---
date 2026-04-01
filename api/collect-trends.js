@@ -1,5 +1,5 @@
-import axios from 'axios';
 import store from './store.js';
+import { safeFetch } from './utils.js';
 
 const KOBIS_KEY = process.env.KOBIS_API_KEY || "57e44523cc7bbb91b7c1fc2fd37b3ca4";
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "Rx0q2Y7SHyMOmmSghFGL";
@@ -45,20 +45,27 @@ function generateReasonText(movie, trendData) {
 }
 
 export default async function handler(req, res) {
+  console.log("[COLLECT] function started");
   const targetDt = getYesterday();
   const today = getToday();
 
   try {
     // 1. Fetch KOBIS Daily Box Office
-    const kobisResponse = await axios.get(
-      `https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json`,
-      { params: { key: KOBIS_KEY, targetDt } }
-    );
+    const kobisUrl = `https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json?key=${KOBIS_KEY}&targetDt=${targetDt}`;
+    const kobisResult = await safeFetch(kobisUrl, {}, "[COLLECT-KOBIS]");
     
-    const boxOfficeList = kobisResponse.data.boxOfficeResult.dailyBoxOfficeList;
+    if (!kobisResult.ok) {
+      return res.status(kobisResult.status || 500).json(kobisResult);
+    }
+    
+    const boxOfficeList = kobisResult.data.boxOfficeResult?.dailyBoxOfficeList || [];
     
     // Store in Firestore
-    await store.setBoxOffice(targetDt, boxOfficeList);
+    try {
+      await store.setBoxOffice(targetDt, boxOfficeList);
+    } catch (cacheError) {
+      console.error("[COLLECT] KOBIS Cache error:", cacheError.message);
+    }
 
     // 2. Fetch Naver Trends for top 5 movies
     const recommendations = [];
@@ -68,31 +75,33 @@ export default async function handler(req, res) {
       // Fetch Naver Trend
       let trendData = null;
       try {
-        const naverResponse = await axios.post(
-          "https://openapi.naver.com/v1/datalab/search",
-          {
+        const naverUrl = "https://openapi.naver.com/v1/datalab/search";
+        const naverResult = await safeFetch(naverUrl, {
+          method: 'POST',
+          headers: {
+            "X-Naver-Client-Id": NAVER_CLIENT_ID,
+            "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
             startDate: "2026-03-01",
             endDate: today,
             timeUnit: "date",
             keywordGroups: [{ groupName: keyword, keywords: [keyword] }]
-          },
-          {
-            headers: {
-              "X-Naver-Client-Id": NAVER_CLIENT_ID,
-              "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-        const results = naverResponse.data.results[0].data;
-        trendData = results[results.length - 1]; // Latest data
+          })
+        }, `[COLLECT-NAVER-${keyword}]`);
         
-        // Store trend data in Firestore
-        if (trendData) {
-          await store.setKeywordTrend(keyword, trendData.period, trendData.ratio);
+        if (naverResult.ok && naverResult.data.results?.[0]?.data) {
+          const results = naverResult.data.results[0].data;
+          trendData = results[results.length - 1]; // Latest data
+          
+          // Store trend data in Firestore
+          if (trendData) {
+            await store.setKeywordTrend(keyword, trendData.period, trendData.ratio);
+          }
         }
       } catch (e) {
-        console.error(`Naver Trend Error for ${keyword}:`, e.message);
+        console.error(`[COLLECT] Naver Trend Error for ${keyword}:`, e.message);
       }
 
       const score = calculateScore(movie, trendData);
@@ -109,11 +118,19 @@ export default async function handler(req, res) {
     }
 
     // Store recommendations in Firestore
-    await store.setRecommendedKeywords(recommendations);
+    try {
+      await store.setRecommendedKeywords(recommendations);
+    } catch (cacheError) {
+      console.error("[COLLECT] Recommendations Cache error:", cacheError.message);
+    }
 
-    res.status(200).json({ ok: true, message: "Data collected and stored.", data: recommendations });
+    return res.status(200).json({ ok: true, message: "Data collected and stored.", data: recommendations });
   } catch (error) {
-    console.error("Collection Error:", error.message);
-    res.status(500).json({ ok: false, error: error.message });
+    console.error("[COLLECT] Internal API error:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "Internal API error",
+      detail: error?.message || String(error)
+    });
   }
 }

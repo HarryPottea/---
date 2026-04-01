@@ -1,36 +1,63 @@
-import axios from 'axios';
 import store from './store.js';
+import { safeFetch } from './utils.js';
 
 export default async function handler(req, res) {
-  const { targetDt } = req.query;
-  const KOBIS_KEY = process.env.KOBIS_API_KEY || "57e44523cc7bbb91b7c1fc2fd37b3ca4";
-  
-  console.log(`KOBIS Request: targetDt=${targetDt}`);
+  console.log("[KOBIS] function started");
   
   try {
-    // 1. Check Firestore Cache
-    const cachedData = await store.getBoxOffice(targetDt);
-    if (cachedData) {
-      console.log(`Serving KOBIS from Firestore cache: ${targetDt}`);
+    // Debug GET check
+    if (req.method === "GET" && req.query?.debug === "1") {
       return res.status(200).json({
-        boxOfficeResult: {
-          dailyBoxOfficeList: cachedData
+        ok: true,
+        route: "kobis",
+        debug: {
+          hasApiKey: !!process.env.KOBIS_API_KEY
         }
       });
     }
 
-    // 2. Fetch from KOBIS
-    const response = await axios.get(
-      `https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json`,
-      { params: { key: KOBIS_KEY, targetDt } }
-    );
+    const { targetDt } = req.query;
+    const KOBIS_KEY = process.env.KOBIS_API_KEY || "57e44523cc7bbb91b7c1fc2fd37b3ca4";
     
-    if (response.data.faultInfo) {
-      console.error("KOBIS API Fault:", response.data.faultInfo.message);
-      return res.status(400).json({ error: response.data.faultInfo.message });
+    console.log("[KOBIS] has KOBIS_API_KEY:", !!process.env.KOBIS_API_KEY);
+    console.log(`[KOBIS] Request: targetDt=${targetDt}`);
+    
+    if (!targetDt) {
+      return res.status(400).json({ ok: false, error: "targetDt is required" });
+    }
+
+    // 1. Check Firestore Cache
+    try {
+      const cachedData = await store.getBoxOffice(targetDt);
+      if (cachedData) {
+        console.log(`[KOBIS] Serving from Firestore cache: ${targetDt}`);
+        return res.status(200).json({
+          ok: true,
+          boxOfficeResult: {
+            dailyBoxOfficeList: cachedData
+          }
+        });
+      }
+    } catch (cacheError) {
+      console.error("[KOBIS] Cache read error:", cacheError.message);
+      // Continue to fetch if cache fails
+    }
+
+    // 2. Fetch from KOBIS
+    const url = `https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json?key=${KOBIS_KEY}&targetDt=${targetDt}`;
+    const result = await safeFetch(url, {}, "[KOBIS]");
+    
+    if (!result.ok) {
+      return res.status(result.status || 500).json(result);
     }
     
-    const dailyList = response.data.boxOfficeResult?.dailyBoxOfficeList || [];
+    const data = result.data;
+    if (data.faultInfo) {
+      console.error("[KOBIS] API Fault:", data.faultInfo.message);
+      return res.status(400).json({ ok: false, error: data.faultInfo.message });
+    }
+    
+    const dailyList = data.boxOfficeResult?.dailyBoxOfficeList || [];
     
     // Enrich with genres
     const enrichedList = await Promise.all(dailyList.map(async (movie) => {
@@ -42,36 +69,45 @@ export default async function handler(req, res) {
         }
 
         // Fetch from Movie Info API
-        const infoRes = await axios.get(
-          `https://www.kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieInfo.json`,
-          { params: { key: KOBIS_KEY, movieCd: movie.movieCd } }
-        );
+        const infoUrl = `https://www.kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieInfo.json?key=${KOBIS_KEY}&movieCd=${movie.movieCd}`;
+        const infoResult = await safeFetch(infoUrl, {}, `[KOBIS-INFO-${movie.movieNm}]`);
         
-        const genres = infoRes.data.movieInfoResult?.movieInfo?.genres || [];
-        const genre = genres.map(g => g.genreNm).join(', ');
-        
-        // Save to cache
-        await store.setMovieMeta(movie.movieNm, { genre });
-        
-        return { ...movie, genre };
+        if (infoResult.ok && infoResult.data.movieInfoResult?.movieInfo) {
+          const genres = infoResult.data.movieInfoResult.movieInfo.genres || [];
+          const genre = genres.map(g => g.genreNm).join(', ');
+          
+          // Save to cache
+          await store.setMovieMeta(movie.movieNm, { genre });
+          return { ...movie, genre };
+        }
+        return movie;
       } catch (e) {
-        console.error(`Error fetching info for ${movie.movieNm}:`, e.message);
+        console.error(`[KOBIS] Error fetching info for ${movie.movieNm}:`, e.message);
         return movie;
       }
     }));
     
     // Save to Firestore cache
     if (enrichedList.length > 0) {
-      await store.setBoxOffice(targetDt, enrichedList);
+      try {
+        await store.setBoxOffice(targetDt, enrichedList);
+      } catch (cacheWriteError) {
+        console.error("[KOBIS] Cache write error:", cacheWriteError.message);
+      }
     }
     
-    res.status(200).json({
+    return res.status(200).json({
+      ok: true,
       boxOfficeResult: {
         dailyBoxOfficeList: enrichedList
       }
     });
   } catch (error) {
-    console.error("KOBIS Error:", error.response?.data || error.message);
-    res.status(500).json({ error: error.response?.data?.error || error.message });
+    console.error("[KOBIS] Internal API error:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "Internal API error",
+      detail: error?.message || String(error)
+    });
   }
 }

@@ -21,33 +21,52 @@ async function callGemini(keyword, apiKey) {
 }
 
 export default async function handler(req, res) {
-  const rawKeyword = req.query.keyword || "AI";
-  const keyword = rawKeyword.trim().toLowerCase();
+  console.log("[GEMINI] function started");
   
   try {
-    // 1. Check Firestore Cache
-    const cachedInsight = await store.getGeminiInsight(keyword);
-    if (cachedInsight) {
-      console.log(`Serving from Firestore cache: ${keyword}`);
-      return res.json({
+    // Debug GET check
+    if (req.method === "GET" && req.query?.debug === "1") {
+      return res.status(200).json({
         ok: true,
-        source: "cache",
-        data: cachedInsight
+        route: "gemini",
+        debug: {
+          hasApiKey: !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+        }
       });
+    }
+
+    const rawKeyword = req.query.keyword || "AI";
+    const keyword = rawKeyword.trim().toLowerCase();
+    
+    console.log(`[GEMINI] Request: keyword=${keyword}`);
+
+    // 1. Check Firestore Cache
+    try {
+      const cachedInsight = await store.getGeminiInsight(keyword);
+      if (cachedInsight) {
+        console.log(`[GEMINI] Serving from Firestore cache: ${keyword}`);
+        return res.status(200).json({
+          ok: true,
+          source: "cache",
+          data: cachedInsight
+        });
+      }
+    } catch (cacheError) {
+      console.error("[GEMINI] Cache read error:", cacheError.message);
     }
 
     // 2. Gemini Call
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    console.log("[GEMINI] has API Key:", !!apiKey);
 
     if (!apiKey) {
-      console.error("Gemini API Key missing in environment");
       return res.status(500).json({ 
         ok: false,
         error: "Gemini API Key is not configured on the server." 
       });
     }
 
-    console.log(`Generating new insight for: ${keyword}`);
+    console.log(`[GEMINI] Generating new insight for: ${keyword}`);
     const result = await callGemini(keyword, apiKey);
 
     // Extract grounding URLs
@@ -68,27 +87,33 @@ export default async function handler(req, res) {
     };
 
     // Save to Firestore cache
-    await store.setGeminiInsight(keyword, result.text, urls);
+    try {
+      await store.setGeminiInsight(keyword, result.text, urls);
+    } catch (cacheWriteError) {
+      console.error("[GEMINI] Cache write error:", cacheWriteError.message);
+    }
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       source: "gemini",
       data
     });
   } catch (error) {
-    console.error("Gemini Error:", error.message);
+    console.error("[GEMINI] Internal API error:", error.message);
     
     // Handle Rate Limit (429)
     if (error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED")) {
       return res.status(429).json({
         ok: false,
-        error: "무료 호출 제한입니다. 10분 뒤에 다시 시도해주세요."
+        error: "무료 호출 제한입니다. 10분 뒤에 다시 시도해주세요.",
+        detail: error.message
       });
     }
 
-    res.status(500).json({ 
+    return res.status(500).json({
       ok: false,
-      error: "Gemini 분석 중 오류가 발생했습니다." 
+      error: "Internal API error",
+      detail: error?.message || String(error)
     });
   }
 }

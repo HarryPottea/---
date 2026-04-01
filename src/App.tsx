@@ -150,16 +150,27 @@ function Dashboard() {
     setError(prev => ({ ...prev, keywords: '' }));
     try {
       const response = await fetch('/api/recommended-keywords');
-      const data = await response.json();
+      const text = await response.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("Recommended Keywords JSON Parse Error. Response text:", text);
+        throw new Error(`서버 응답 파싱 실패: ${text.slice(0, 150)}`);
+      }
 
-      if (response.ok && data.ok && data.data) {
+      if (!response.ok || !data.ok) {
+        const errorMsg = data.error || `추천 키워드 조회 실패 (상태 코드: ${response.status})`;
+        const detail = data.detail ? ` (${data.detail})` : "";
+        throw new Error(errorMsg + detail);
+      }
+
+      if (data.data) {
         setRecommendedKeywords(data.data);
         if (data.data.length > 0 && keyword === 'AI') {
           setKeyword(data.data[0].keyword);
         }
-      } else {
-        const errorMsg = data.error || `추천 키워드 조회 실패 (상태 코드: ${response.status})`;
-        throw new Error(errorMsg);
       }
     } catch (err: any) {
       setError(prev => ({ ...prev, keywords: err.message }));
@@ -200,7 +211,13 @@ function Dashboard() {
         throw new Error(`서버 응답 파싱 실패: ${text.substring(0, 50)}...`);
       }
 
-      if (response.ok && data.ok && data.data?.insight) {
+      if (!response.ok || !data.ok) {
+        const errorMsg = data.error || `구글 트렌드 분석 실패 (상태 코드: ${response.status})`;
+        const detail = data.detail ? ` (${data.detail})` : "";
+        throw new Error(errorMsg + detail);
+      }
+
+      if (data.data?.insight) {
         const resultText = data.data.insight;
         const source = data.source || 'gemini';
         let urls: {title: string, uri: string}[] = [];
@@ -223,8 +240,7 @@ function Dashboard() {
           [targetKeyword]: { text: resultText, urls, source }
         }));
       } else {
-        const errorMsg = data.error || `구글 트렌드 분석 실패 (상태 코드: ${response.status})`;
-        throw new Error(errorMsg);
+        throw new Error("분석 결과 데이터가 올바르지 않습니다.");
       }
     } catch (err: any) {
       setError(prev => ({ ...prev, google: err.message }));
@@ -248,16 +264,19 @@ function Dashboard() {
         data = JSON.parse(text);
       } catch (e) {
         console.error("KOBIS JSON Parse Error. Response text:", text);
-        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+        throw new Error(`서버 응답 파싱 실패: ${text.slice(0, 150)}`);
       }
 
-      if (response.ok && data.boxOfficeResult?.dailyBoxOfficeList) {
+      if (!response.ok || !data.ok) {
+        const errorMsg = data.error || `데이터를 불러오지 못했습니다. (상태 코드: ${response.status})`;
+        const detail = data.detail ? ` (${data.detail})` : "";
+        throw new Error(errorMsg + detail);
+      }
+
+      if (data.boxOfficeResult?.dailyBoxOfficeList) {
         setMovies(data.boxOfficeResult.dailyBoxOfficeList);
       } else {
-        setError(prev => ({ 
-          ...prev, 
-          kobis: data.error || `데이터를 불러오지 못했습니다. (상태 코드: ${response.status})` 
-        }));
+        throw new Error("올바른 박스오피스 데이터 형식이 아닙니다.");
       }
     } catch (err: any) {
       setError(prev => ({ ...prev, kobis: `KOBIS 연동 중 에러가 발생했습니다: ${err.message}` }));
@@ -294,16 +313,19 @@ function Dashboard() {
         data = JSON.parse(text);
       } catch (e) {
         console.error("Naver JSON Parse Error. Response text:", text);
-        throw new Error(`서버 응답이 올바른 JSON 형식이 아닙니다. (응답 내용: ${text.substring(0, 100)}...)`);
+        throw new Error(`서버 응답 파싱 실패: ${text.slice(0, 150)}`);
       }
 
-      if (response.ok && data.results?.[0]?.data) {
+      if (!response.ok || !data.ok) {
+        const errorMsg = data.error || `네이버 API 요청 실패 (상태 코드: ${response.status})`;
+        const detail = data.detail ? ` (${data.detail})` : "";
+        throw new Error(errorMsg + detail);
+      }
+
+      if (data.results?.[0]?.data) {
         setNaverTrends(data.results[0].data);
       } else {
-        setError(prev => ({ 
-          ...prev, 
-          naver: data.error || `네이버 API 요청 실패 (상태 코드: ${response.status})` 
-        }));
+        throw new Error("올바른 네이버 트렌드 데이터 형식이 아닙니다.");
       }
     } catch (err: any) {
       setError(prev => ({ ...prev, naver: `네이버 연동 중 에러가 발생했습니다: ${err.message}` }));
