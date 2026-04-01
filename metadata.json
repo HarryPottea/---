@@ -1,0 +1,5 @@
+{
+  "name": "Movie Trend Dashboard",
+  "description": "A comprehensive dashboard for movie planning, featuring KOBIS box office data and search trends from Naver and Google.",
+  "requestFramePermissions": []
+}
