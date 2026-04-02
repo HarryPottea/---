@@ -31,7 +31,7 @@ const store = {
         .upsert({
           date,
           movies,
-          updatedAt: new Date().toISOString()
+          updatedat: new Date().toISOString()
         }, { onConflict: 'date' });
       
       if (error) console.error("[STORE] setBoxOffice error:", error.message);
@@ -70,7 +70,7 @@ const store = {
         .upsert({
           ...meta,
           movieNm,
-          updatedAt: new Date().toISOString()
+          updatedat: new Date().toISOString()
         }, { onConflict: 'movieNm' });
       
       if (error) console.error("[STORE] setMovieMeta error:", error.message);
@@ -111,7 +111,7 @@ const store = {
           keyword,
           date,
           ratio,
-          updatedAt: new Date().toISOString()
+          updatedat: new Date().toISOString()
         }, { onConflict: 'id' });
       
       if (error) console.error("[STORE] setKeywordTrend error:", error.message);
@@ -129,7 +129,7 @@ const store = {
         .from('recommended_keywords')
         .select('*')
         .eq('date', targetDate)
-        .order('recommendationScore', { ascending: false })
+        .order('recommendationscore', { ascending: false })
         .limit(10);
 
       let { data, error } = await query;
@@ -144,7 +144,7 @@ const store = {
         const fallback = await supabase
           .from('recommended_keywords')
           .select('*')
-          .order('updatedAt', { ascending: false })
+          .order('updatedat', { ascending: false })
           .limit(10);
 
         if (fallback.error) {
@@ -154,7 +154,16 @@ const store = {
         data = fallback.data || [];
       }
 
-      return data || [];
+      return (data || []).map(item => ({
+        id: item.id,
+        keyword: item.keyword,
+        date: item.date,
+        recommendationScore: item.recommendationscore,
+        trendState: item.trendstate,
+        reasonText: item.reasontext,
+        sourceSummary: item.sourcesummary,
+        updatedAt: item.updatedat
+      }));
     } catch (e) {
       console.error("[STORE] getRecommendedKeywords error:", e.message);
       return [];
@@ -164,8 +173,14 @@ const store = {
     if (!supabase) return;
     try {
       const rows = keywords.map(item => ({
-        ...item,
-        updatedAt: new Date().toISOString()
+        id: `${item.keyword}_${item.date}`,
+        keyword: item.keyword,
+        date: item.date,
+        recommendationscore: item.recommendationScore,
+        trendstate: item.trendState,
+        reasontext: item.reasonText,
+        sourcesummary: item.sourceSummary,
+        updatedat: new Date().toISOString()
       }));
 
       const first = rows[0];
@@ -202,7 +217,7 @@ const store = {
 
       const { error } = await supabase
         .from('recommended_keywords')
-        .upsert(rows, { onConflict: 'keyword' });
+        .upsert(rows, { onConflict: 'id' });
 
       if (error) {
         console.error("[STORE] setRecommendedKeywords error:", error.message);
@@ -230,11 +245,16 @@ const store = {
       }
 
       if (data) {
-        const updatedAt = new Date(data.updatedAt);
+        const updatedAt = new Date(data.updatedat);
         const now = new Date();
         // Cache for 24 hours
         if (now.getTime() - updatedAt.getTime() < 24 * 60 * 60 * 1000) {
-          return data;
+          return {
+            keyword: data.keyword,
+            insight: data.insight,
+            urls: data.urls,
+            updatedAt: data.updatedat
+          };
         }
       }
     } catch (e) {
@@ -251,7 +271,7 @@ const store = {
           keyword,
           insight,
           urls,
-          updatedAt: new Date().toISOString()
+          updatedat: new Date().toISOString()
         }, { onConflict: 'keyword' });
       
       if (error) console.error("[STORE] setGeminiInsight error:", error.message);
