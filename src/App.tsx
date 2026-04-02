@@ -437,7 +437,7 @@ function Dashboard() {
           <div className="p-6 bg-indigo-600 text-white flex justify-between items-center">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-indigo-200" />
-              <h3 className="font-bold text-lg">데이터 기반 추천 트렌드 키워드</h3>
+              <h3 className="font-bold text-lg">대중 관심사 기반 추천 키워드</h3>
             </div>
             <div className="flex items-center gap-4">
               <button 
@@ -528,7 +528,7 @@ function Dashboard() {
             ) : (
               <div className="text-center py-8 text-gray-400">
                 <Info className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm">추천 키워드 데이터가 아직 생성되지 않았습니다. 상단의 '데이터 수집' 버튼을 눌러주세요.</p>
+                <p className="text-sm">관심사 키워드 데이터가 아직 생성되지 않았습니다. 상단의 '데이터 수집' 버튼을 눌러주세요.</p>
               </div>
             )}
           </div>

@@ -1,55 +1,84 @@
 import store from './store.js';
 import { safeFetch } from './utils.js';
+import seedKeywordData from '../data/seed-keywords.json' with { type: 'json' };
 
-const KOBIS_KEY = process.env.KOBIS_API_KEY || "57e44523cc7bbb91b7c1fc2fd37b3ca4";
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "Rx0q2Y7SHyMOmmSghFGL";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "Fb2BDCQKu5";
-
-function getYesterday() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10).replace(/-/g, '');
-}
 
 function getToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Recommendation Score Calculation
-function calculateScore(movie, trendData) {
-  const todayScore = Number(movie.audiCnt) / 5000; // Lowered denominator for higher sensitivity
-  const dayChangeRate = Number(movie.audiChange || 0) / 50; // Lowered denominator
-  const trendScore = trendData ? trendData.ratio / 5 : 0; // Lowered denominator
-  
-  const score = (todayScore * 0.4) + (dayChangeRate * 0.3) + (trendScore * 0.3);
-  // Ensure at least some score if it's in top 5
-  const finalScore = Math.max(Math.round(score * 10), 5);
-  return Math.min(finalScore, 100);
+function getStartDate(days = 30) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
-// Trend State Determination
-function determineTrendState(movie, trendData) {
-  const audiChange = Number(movie.audiChange || 0);
-  if (audiChange > 30) return "급상승";
-  if (audiChange > 5) return "상승 중";
-  if (audiChange < -30) return "하락 중";
-  if (audiChange < -5) return "하락 중";
+function flattenSeedKeywords() {
+  return seedKeywordData.categories.flatMap(category =>
+    category.keywords.map(keyword => ({
+      keyword,
+      category: category.name
+    }))
+  );
+}
+
+function calculateTrendScore(series) {
+  if (!series || series.length === 0) return 0;
+
+  const ratios = series.map(item => Number(item.ratio || 0));
+  const latest = ratios[ratios.length - 1] || 0;
+  const previous = ratios[ratios.length - 2] || latest || 0;
+  const recentWindow = ratios.slice(-7);
+  const recentAverage = recentWindow.length > 0
+    ? recentWindow.reduce((sum, value) => sum + value, 0) / recentWindow.length
+    : latest;
+
+  const momentum = latest - previous;
+  const lift = recentAverage > 0 ? ((latest - recentAverage) / recentAverage) * 100 : 0;
+
+  const score = (latest * 0.6) + (momentum * 1.5) + (lift * 0.25);
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function determineTrendState(series) {
+  if (!series || series.length < 2) return "유지";
+  const latest = Number(series[series.length - 1]?.ratio || 0);
+  const previous = Number(series[series.length - 2]?.ratio || 0);
+  const diff = latest - previous;
+
+  if (diff >= 8) return "급상승";
+  if (diff >= 2) return "상승 중";
+  if (diff <= -8) return "급하락";
+  if (diff <= -2) return "하락 중";
   return "유지";
 }
 
-// Reason Text Generation
-function generateReasonText(movie, trendData) {
-  const audiChange = Number(movie.audiChange || 0);
-  if (audiChange > 30) return "전일 대비 관객수가 급격히 증가하며 화제가 되고 있습니다.";
-  if (audiChange > 5) return "전일 대비 관객수가 상승하며 긍정적인 흐름을 보입니다.";
-  if (trendData && trendData.ratio > 30) return "네이버 검색 트렌드에서 높은 관심도를 기록 중입니다.";
-  return "박스오피스 상위권에서 꾸준한 인기를 유지하고 있습니다.";
+function generateReasonText(keyword, category, series) {
+  if (!series || series.length === 0) {
+    return `${category} 분야에서 꾸준히 관찰할 만한 관심 키워드입니다.`;
+  }
+
+  const latest = Number(series[series.length - 1]?.ratio || 0);
+  const previous = Number(series[series.length - 2]?.ratio || 0);
+  const diff = latest - previous;
+
+  if (diff >= 8) {
+    return `최근 검색량이 빠르게 상승 중인 ${category} 관심사입니다.`;
+  }
+  if (diff >= 2) {
+    return `${category} 관련 관심이 꾸준히 커지고 있는 흐름입니다.`;
+  }
+  if (latest >= 60) {
+    return `현재 대중 관심도가 높은 ${category} 키워드입니다.`;
+  }
+  return `${category} 맥락에서 기획 아이디어로 확장해볼 만한 관심사입니다.`;
 }
 
 export default async function handler(req, res) {
   console.log("[COLLECT] function started");
-  
-  // Health check
+
   if (req.query?.health === "1") {
     return res.status(200).json({
       ok: true,
@@ -57,37 +86,17 @@ export default async function handler(req, res) {
     });
   }
 
-  const targetDt = getYesterday();
   const today = getToday();
+  const startDate = getStartDate(30);
+  const keywordPool = flattenSeedKeywords();
 
   try {
-    // 1. Fetch KOBIS Daily Box Office
-    const kobisUrl = `https://www.kobis.or.kr/kobisopenapi/webservice/rest/boxoffice/searchDailyBoxOfficeList.json?key=${KOBIS_KEY}&targetDt=${targetDt}`;
-    const kobisResult = await safeFetch(kobisUrl, {}, "[COLLECT-KOBIS]");
-    
-    if (!kobisResult.ok) {
-      return res.status(kobisResult.status || 500).json(kobisResult);
-    }
-    
-    const boxOfficeList = kobisResult.data.boxOfficeResult?.dailyBoxOfficeList || [];
-    console.log("[COLLECT] boxOfficeList count:", boxOfficeList.length);
-    
-    // Store in Firestore
-    try {
-      await store.setBoxOffice(targetDt, boxOfficeList);
-    } catch (cacheError) {
-      console.error("[COLLECT] KOBIS Cache error:", cacheError.message);
-    }
-
-    // 2. Fetch Naver Trends for top 5 movies
-    const recommendations = [];
     const trends = [];
+    const recommendations = [];
 
-    for (const movie of boxOfficeList.slice(0, 5)) {
-      const keyword = movie.movieNm;
-      
-      // Fetch Naver Trend
-      let trendData = null;
+    for (const item of keywordPool) {
+      const { keyword, category } = item;
+
       try {
         const naverUrl = "https://openapi.naver.com/v1/datalab/search";
         const naverResult = await safeFetch(naverUrl, {
@@ -98,69 +107,69 @@ export default async function handler(req, res) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            startDate: "2026-03-01",
+            startDate,
             endDate: today,
             timeUnit: "date",
             keywordGroups: [{ groupName: keyword, keywords: [keyword] }]
           })
         }, `[COLLECT-NAVER-${keyword}]`);
-        
-        if (naverResult.ok && naverResult.data.results?.[0]?.data) {
-          const results = naverResult.data.results[0].data;
-          trendData = results[results.length - 1]; // Latest data
-          
-          // Store trend data in Firestore
-          if (trendData) {
-            await store.setKeywordTrend(keyword, trendData.period, trendData.ratio);
-            trends.push({ keyword, ...trendData });
-          }
+
+        if (!naverResult.ok || !naverResult.data.results?.[0]?.data) {
+          continue;
         }
+
+        const series = naverResult.data.results[0].data || [];
+        const latest = series[series.length - 1];
+        if (!latest) continue;
+
+        await store.setKeywordTrend(keyword, latest.period, latest.ratio);
+        trends.push({ keyword, category, latestRatio: latest.ratio, latestPeriod: latest.period });
+
+        const recommendationScore = calculateTrendScore(series);
+        if (recommendationScore < 15) continue;
+
+        recommendations.push({
+          keyword,
+          recommendationScore,
+          trendState: determineTrendState(series),
+          reasonText: generateReasonText(keyword, category, series),
+          sourceSummary: ["seed-keywords", "naver-trend", category],
+          date: today
+        });
       } catch (e) {
         console.error(`[COLLECT] Naver Trend Error for ${keyword}:`, e.message);
       }
-
-      const score = calculateScore(movie, trendData);
-      const state = determineTrendState(movie, trendData);
-      const reason = generateReasonText(movie, trendData);
-
-      if (score > 0) {
-        recommendations.push({
-          keyword,
-          recommendationScore: score,
-          trendState: state,
-          reasonText: reason,
-          sourceSummary: ["kobis-boxoffice", trendData ? "naver-trend" : null].filter(Boolean),
-          date: today
-        });
-      }
     }
+
+    const topRecommendations = recommendations
+      .sort((a, b) => b.recommendationScore - a.recommendationScore)
+      .slice(0, 12);
 
     console.log("[COLLECT] trends count:", trends.length);
-    console.log("[COLLECT] recommended count:", recommendations.length);
-    if (recommendations.length > 0) {
-      console.log("[COLLECT] sample recommended:", recommendations[0]);
+    console.log("[COLLECT] recommended count:", topRecommendations.length);
+    if (topRecommendations.length > 0) {
+      console.log("[COLLECT] sample recommended:", topRecommendations[0]);
     }
 
-    // Store recommendations in Firestore
-   let saveOk = true;
-   let saveError = '';
+    let saveOk = true;
+    let saveError = '';
 
-   try {
-     await store.setRecommendedKeywords(recommendations);
-}    catch (cacheError) {
-     console.error("[COLLECT] Recommendations Cache error:", cacheError.message);
-     saveOk = false;
-     saveError = cacheError.message;
-}
+    try {
+      await store.setRecommendedKeywords(topRecommendations);
+    } catch (cacheError) {
+      console.error("[COLLECT] Recommendations Cache error:", cacheError.message);
+      saveOk = false;
+      saveError = cacheError.message;
+    }
 
-    return res.status(200).json({ 
-      ok: true, 
-      message: "Data collected and stored.", 
+    return res.status(200).json({
+      ok: true,
+      message: "Interest keywords collected and stored.",
       collectedCount: trends.length,
-      recommendedCount: recommendations.length,
+      recommendedCount: topRecommendations.length,
       saveOk,
       saveError,
-      recommendedSample: recommendations.slice(0, 5)
+      recommendedSample: topRecommendations.slice(0, 5)
     });
   } catch (error) {
     console.error("[COLLECT] Internal API error:", error.message);
