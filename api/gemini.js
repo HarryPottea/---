@@ -4,14 +4,28 @@ import store from './store.js';
 async function callGemini(keyword, apiKey) {
   const ai = new GoogleGenAI({ apiKey: apiKey });
 
-  const prompt = `최근 구글 트렌드와 검색 데이터를 바탕으로 '${keyword}'에 대한 대중의 관심도 변화와 특징을 분석해줘. 영화 기획자 관점에서 요약해줘.`;
+  const prompt = `키워드 '${keyword}'가 대중의 현재 관심사로 떠오를 때, 이것이 시사하는 감정·욕망·사회 분위기를 콘텐츠 기획 관점에서 한국어로 500자 이내로 정리해줘.
+
+출력 규칙:
+- '**' 같은 마크다운 강조를 쓰지 말 것
+- 아래 3개 섹션을 이모지 제목으로 시작할 것
+- 각 섹션은 1~2문장으로 짧고 선명하게 쓸 것
+
+형식:
+👀 왜 반응하는가
+...
+
+🎬 기획 포인트
+...
+
+🎭 장르/톤 제안
+...
+
+과장 없이, 뉴스 해설이 아니라 기획 인사이트 중심으로 써줘.`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: prompt,
-    config: {
-      tools: [{ googleSearch: {} }]
-    }
+    model: "gemini-2.5-flash",
+    contents: prompt
   });
 
   return {
