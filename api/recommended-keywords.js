@@ -20,12 +20,10 @@ export default async function handler(req, res) {
 
     // Fetch from Firestore via store
     try {
-      let recommendations = await store.getRecommendedKeywords();
+      const date = req.query?.date || null;
+      let recommendations = await store.getRecommendedKeywords(date);
 
-      // If no recommendations found, it might be because they haven't been generated today
-      // The store.getRecommendedKeywords() currently just gets top 10 regardless of date
-      // But we can add a check or log here.
-      
+      console.log("[RECOMMENDED] target date:", date || 'today');
       console.log("[RECOMMENDED] result count:", recommendations.length);
 
       if (!recommendations || recommendations.length === 0) {

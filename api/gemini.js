@@ -1,10 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
+import store from './store.js';
 
 async function callGemini(keyword, apiKey) {
   const ai = new GoogleGenAI({ apiKey: apiKey });
-  
+
   const prompt = `최근 구글 트렌드와 검색 데이터를 바탕으로 '${keyword}'에 대한 대중의 관심도 변화와 특징을 분석해줘. 영화 기획자 관점에서 요약해줘.`;
-  
+
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: prompt,
@@ -32,11 +33,21 @@ export default async function handler(req, res) {
     }
 
     const rawKeyword = req.query.keyword || "AI";
-    const keyword = rawKeyword.trim().toLowerCase();
-    
+    const keyword = String(rawKeyword).trim().toLowerCase();
+
     console.log(`[GEMINI] Request: keyword=${keyword}`);
 
-    // 2. Gemini Call (Pure processing, no cache)
+    const cached = await store.getGeminiInsight(keyword);
+    if (cached?.insight) {
+      console.log(`[GEMINI] Cache hit for: ${keyword}`);
+      return res.status(200).json({
+        ok: true,
+        source: "cache",
+        data: cached
+      });
+    }
+
+    // 2. Gemini Call (Cache miss)
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     console.log("[GEMINI] has API Key:", !!apiKey);
     if (apiKey) {
@@ -70,6 +81,8 @@ export default async function handler(req, res) {
       candidates: result.candidates,
       updatedAt: new Date().toISOString()
     };
+
+    await store.setGeminiInsight(keyword, data.insight, data.urls);
 
     return res.status(200).json({
       ok: true,

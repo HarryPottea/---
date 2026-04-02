@@ -106,6 +106,8 @@ interface RecommendedKeyword {
   trendState: string;
   reasonText: string;
   sourceSummary: string[];
+  date?: string;
+  updatedAt?: string;
 }
 
 export default function App() {
@@ -242,7 +244,11 @@ function Dashboard() {
         throw new Error("분석 결과 데이터가 올바르지 않습니다.");
       }
     } catch (err: any) {
-      setError(prev => ({ ...prev, google: err.message }));
+      const message = String(err?.message || '');
+      const friendlyMessage = message.includes('무료 호출 제한') || message.includes('429') || message.includes('RESOURCE_EXHAUSTED')
+        ? '무료 호출 제한입니다. 제한이 풀리면 노출될 예정입니다.'
+        : 'AI 인사이트를 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      setError(prev => ({ ...prev, google: friendlyMessage }));
     } finally {
       setLoading(prev => ({ ...prev, google: false }));
     }
@@ -421,95 +427,179 @@ function Dashboard() {
 
       {/* Main Content */}
       <main className="flex-1 p-4 sm:p-8 max-w-6xl mx-auto space-y-8 w-full overflow-x-hidden">
-        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">🎬 영화 기획 트렌드 대시보드</h2>
-            <p className="text-sm sm:text-base text-gray-500">대중의 관심사와 박스오피스 동향을 한눈에 파악하세요.</p>
-          </div>
-          <div className="text-left sm:text-right">
-            <p className="text-[10px] font-mono text-gray-400 uppercase tracking-widest">Last Updated</p>
-            <p className="text-xs sm:text-sm font-semibold">{format(new Date(), 'yyyy.MM.dd HH:mm')}</p>
+        <header className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 sm:p-8 text-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.6)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.32),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(56,189,248,0.18),transparent_24%)]" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-200">
+                Audience Insight Console
+              </span>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">기획 인사이트 시스템</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+                네이버 DataLab의 상대 관심도 흐름을 바탕으로 대중 관심사를 추적하고, 영화/콘텐츠 기획에 바로 쓸 수 있는 키워드를 큐레이션합니다.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">오늘의 키워드</p>
+                <p className="mt-2 text-2xl font-semibold">{recommendedKeywords.length || '-'}개</p>
+                <p className="mt-1 text-xs text-slate-400">상위 관심사 기준</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">선택 키워드</p>
+                <p className="mt-2 text-lg font-semibold">{keyword}</p>
+                <p className="mt-1 text-xs text-slate-400">현재 상세 분석 중</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Last Updated</p>
+                <p className="mt-2 text-lg font-semibold">{format(new Date(), 'yyyy.MM.dd HH:mm')}</p>
+                <p className="mt-1 text-xs text-slate-400">Asia/Seoul</p>
+              </div>
+            </div>
           </div>
         </header>
 
         {/* Trending Keywords Section */}
-        <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-6 bg-indigo-600 text-white flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-indigo-200" />
-              <h3 className="font-bold text-lg">데이터 기반 추천 트렌드 키워드</h3>
-            </div>
-            <div className="flex items-center gap-4">
-              <button 
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)]">
+          <div className="border-b border-slate-200 bg-gradient-to-r from-indigo-600 via-indigo-500 to-sky-500 px-6 py-5 text-white">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-100" />
+                  <h3 className="text-lg font-semibold">오늘 주목할 관심사</h3>
+                </div>
+                <p className="mt-2 text-sm text-indigo-100">
+                  네이버 DataLab 상대 관심도 기반입니다. 절대 검색량이 아니라, 최근 흐름 속에서 얼마나 두드러지는지 보여주는 지표예요.
+                </p>
+              </div>
+              <button
                 onClick={async () => {
                   setLoading(prev => ({ ...prev, keywords: true }));
-                  await fetch('/api/collect-trends');
-                  await fetchTrendingKeywords();
+                  setError(prev => ({ ...prev, keywords: '' }));
+                  try {
+                    const response = await fetch('/api/collect-trends');
+                    const text = await response.text();
+                    let json;
+                    try {
+                      json = JSON.parse(text);
+                    } catch {
+                      throw new Error(`데이터 수집 응답 파싱 실패: ${text.slice(0, 150)}`);
+                    }
+
+                    if (!response.ok || !json.ok) {
+                      throw new Error(json.error || json.detail || `데이터 수집 실패 (상태 코드: ${response.status})`);
+                    }
+
+                    await fetchTrendingKeywords();
+                  } catch (err: any) {
+                    setError(prev => ({ ...prev, keywords: err.message }));
+                  } finally {
+                    setLoading(prev => ({ ...prev, keywords: false }));
+                  }
                 }}
                 disabled={loading.keywords}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-xs font-medium disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-white/20 disabled:opacity-50"
               >
-                <RefreshCw className={cn("w-3.5 h-3.5", loading.keywords && "animate-spin")} />
+                <RefreshCw className={cn("h-4 w-4", loading.keywords && "animate-spin")} />
                 데이터 수집 및 갱신
               </button>
             </div>
           </div>
-          
+
           <div className="p-6">
+            <div className="mb-6 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:grid-cols-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">트렌드 점수</p>
+                <p className="mt-1 leading-6 whitespace-pre-line">상대 관심도, 직전 대비 변화량, 최근 7일
+평균 대비 상승폭을 조합한 내부 비교 점수입니다.</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">상대 관심도</p>
+                <p className="mt-1 leading-6 whitespace-pre-line">네이버 DataLab이 제공하는 정규화 지표입니다.
+실제 검색건수(raw volume)는 아닙니다.</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">활용 포인트</p>
+                <p className="mt-1 leading-6 whitespace-pre-line">대중의 현재 관심사를 소재, 장르, 캐릭터,
+톤앤매너 기획으로 반영하는 데 적합합니다.</p>
+              </div>
+            </div>
+
             {loading.keywords ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600"></div>
               </div>
             ) : error.keywords ? (
-              <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
+              <div className="flex items-center gap-2 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4" />
                 {error.keywords}
               </div>
             ) : recommendedKeywords.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {recommendedKeywords.map((item) => (
-                  <button
-                    key={item.keyword}
-                    onClick={() => setKeyword(item.keyword)}
-                    className={cn(
-                      "text-left p-4 rounded-xl border transition-all group relative overflow-hidden",
-                      keyword === item.keyword 
-                        ? "border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600 shadow-md" 
-                        : "border-gray-100 hover:border-indigo-200 hover:bg-gray-50"
-                    )}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="font-bold text-base"># {item.keyword}</span>
-                      <span className={cn(
-                        "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter",
-                        item.trendState === '급상승' ? "bg-red-100 text-red-600" :
-                        item.trendState === '상승 중' ? "bg-orange-100 text-orange-600" :
-                        "bg-gray-100 text-gray-600"
-                      )}>
-                        {item.trendState}
-                      </span>
-                    </div>
-                    <div className="flex items-end justify-between">
-                      <div className="space-y-1">
-                        <p className="text-[11px] text-gray-500 line-clamp-1">{item.reasonText}</p>
-                        <div className="flex gap-1">
-                          {item.sourceSummary.map(s => (
-                            <span key={s} className="text-[9px] bg-gray-200 text-gray-600 px-1 rounded">{s}</span>
-                          ))}
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                {recommendedKeywords.map((item, index) => {
+                  const category = item.sourceSummary.find(summary => !['seed-keywords', 'naver-trend'].includes(summary));
+                  const trendTone = item.trendState === '급상승'
+                    ? 'bg-rose-50 text-rose-600 border-rose-200'
+                    : item.trendState === '상승 중'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : item.trendState.includes('하락')
+                        ? 'bg-slate-100 text-slate-500 border-slate-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+
+                  return (
+                    <button
+                      key={item.keyword}
+                      onClick={() => setKeyword(item.keyword)}
+                      className={cn(
+                        'group relative overflow-hidden rounded-[24px] border p-5 text-left transition-all duration-200',
+                        keyword === item.keyword
+                          ? 'border-indigo-500 bg-indigo-50/80 shadow-[0_18px_40px_-26px_rgba(79,70,229,0.55)] ring-1 ring-indigo-200'
+                          : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_16px_32px_-24px_rgba(15,23,42,0.28)]'
+                      )}
+                    >
+                      <div className="absolute right-4 top-4 text-4xl font-black tracking-tight text-slate-100 transition group-hover:text-indigo-100">
+                        {(index + 1).toString().padStart(2, '0')}
+                      </div>
+                      <div className="relative">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Interest Keyword</p>
+                            <h4 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">{item.keyword}</h4>
+                          </div>
+                          <span className={cn('rounded-full border px-3 py-1 text-[11px] font-semibold', trendTone)}>
+                            {item.trendState}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 flex items-end justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Trend Score</p>
+                            <p className="mt-1 text-3xl font-black tracking-tight text-indigo-600">{item.recommendationScore}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Category</p>
+                            <p className="mt-1 text-sm font-medium text-slate-700">{category || '관심사'}</p>
+                          </div>
+                        </div>
+
+                        <p className="mt-4 min-h-[48px] text-sm leading-6 text-slate-600">{item.reasonText}</p>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">상대 관심도 기반</span>
+                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-600">기획 인사이트 후보</span>
+                          {category && (
+                            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700">{category}</span>
+                          )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[10px] text-gray-400 uppercase font-bold leading-none mb-1">Score</p>
-                        <p className="text-xl font-black text-indigo-600 leading-none">{item.recommendationScore}</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-400">
-                <Info className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm">추천 키워드 데이터가 아직 생성되지 않았습니다. 상단의 '데이터 수집' 버튼을 눌러주세요.</p>
+              <div className="py-8 text-center text-gray-400">
+                <Info className="mx-auto mb-2 h-8 w-8 opacity-20" />
+                <p className="text-sm">관심사 키워드 데이터가 아직 생성되지 않았습니다. 상단의 '데이터 수집' 버튼을 눌러주세요.</p>
               </div>
             )}
           </div>
@@ -585,7 +675,7 @@ function Dashboard() {
               <div className="p-2 bg-green-50 rounded-lg">
                 <TrendingUp className="w-5 h-5 text-green-600" />
               </div>
-              <h3 className="font-bold text-base sm:text-lg">2. 네이버 검색 트렌드</h3>
+              <h3 className="font-bold text-base sm:text-lg">2. 네이버 상대 관심도 흐름</h3>
             </div>
             <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded-full">
               {keyword}
@@ -629,7 +719,7 @@ function Dashboard() {
                         strokeWidth={3} 
                         dot={false}
                         activeDot={{r: 6, strokeWidth: 0}}
-                        name="검색 비율"
+                        name="상대 관심도"
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -646,7 +736,7 @@ function Dashboard() {
               <div className="p-2 bg-blue-50 rounded-lg">
                 <Globe className="w-5 h-5 text-blue-600" />
               </div>
-              <h3 className="font-bold text-base sm:text-lg">3. AI 구글 트렌드 인사이트</h3>
+              <h3 className="font-bold text-base sm:text-lg">3. AI 기획 인사이트</h3>
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               {insightSource && (
@@ -654,7 +744,7 @@ function Dashboard() {
                   "text-[10px] sm:text-xs font-medium px-2 py-1 rounded-full",
                   insightSource === 'cache' ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
                 )}>
-                  {insightSource === 'cache' ? "오늘 분석 결과" : "새 분석 생성됨"}
+                  {insightSource === 'cache' ? "캐시된 인사이트" : "새 인사이트 생성"}
                 </span>
               )}
               <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
@@ -674,7 +764,7 @@ function Dashboard() {
             {loading.google ? (
               <div className="flex flex-col items-center justify-center py-12 space-y-4">
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-                <p className="text-sm text-gray-500 animate-pulse">구글 트렌드 데이터를 분석 중입니다...</p>
+                <p className="text-sm text-gray-500 animate-pulse">선택한 관심사를 기획 관점으로 해석하고 있습니다...</p>
               </div>
             ) : error.google ? (
               <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-xl text-sm">
