@@ -142,17 +142,24 @@ export default async function handler(req, res) {
     }
 
     // Store recommendations in Firestore
-    try {
-      await store.setRecommendedKeywords(recommendations);
-    } catch (cacheError) {
-      console.error("[COLLECT] Recommendations Cache error:", cacheError.message);
-    }
+   let saveOk = true;
+   let saveError = '';
+
+   try {
+     await store.setRecommendedKeywords(recommendations);
+}    catch (cacheError) {
+     console.error("[COLLECT] Recommendations Cache error:", cacheError.message);
+     saveOk = false;
+     saveError = cacheError.message;
+}
 
     return res.status(200).json({ 
       ok: true, 
       message: "Data collected and stored.", 
       collectedCount: trends.length,
       recommendedCount: recommendations.length,
+      saveOk,
+      saveError,
       recommendedSample: recommendations.slice(0, 5)
     });
   } catch (error) {
