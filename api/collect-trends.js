@@ -1,5 +1,6 @@
 import store from './store.js';
 import { safeFetch } from './utils.js';
+import geminiHandler from './gemini.js';
 import seedKeywordData from '../data/seed-keywords.json' with { type: 'json' };
 
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "Rx0q2Y7SHyMOmmSghFGL";
@@ -74,6 +75,37 @@ function generateReasonText(keyword, category, series) {
     return `현재 대중 관심도가 높은 ${category} 키워드입니다.`;
   }
   return `${category} 맥락에서 기획 아이디어로 확장해볼 만한 관심사입니다.`;
+}
+
+async function autoGenerateInsights(keywords) {
+  const results = [];
+
+  for (const keyword of keywords) {
+    const cached = await store.getGeminiInsight(keyword);
+    if (cached?.insight) {
+      results.push({ keyword, source: 'cache' });
+      continue;
+    }
+
+    const req = { query: { keyword } };
+    let statusCode = 200;
+    let payload = null;
+    const res = {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(body) {
+        payload = body;
+        return body;
+      }
+    };
+
+    await geminiHandler(req, res);
+    results.push({ keyword, statusCode, source: payload?.source || 'generated' });
+  }
+
+  return results;
 }
 
 export default async function handler(req, res) {
@@ -151,6 +183,14 @@ export default async function handler(req, res) {
       console.log("[COLLECT] sample recommended:", topRecommendations[0]);
     }
 
+    const autoInsightTargets = topRecommendations.slice(0, 3).map(item => item.keyword);
+    let autoInsightResults = [];
+    try {
+      autoInsightResults = await autoGenerateInsights(autoInsightTargets);
+    } catch (insightError) {
+      console.error("[COLLECT] Auto insight generation error:", insightError.message);
+    }
+
     let saveOk = true;
     let saveError = '';
 
@@ -169,6 +209,8 @@ export default async function handler(req, res) {
       recommendedCount: topRecommendations.length,
       saveOk,
       saveError,
+      autoInsightCount: autoInsightResults.length,
+      autoInsightResults,
       recommendedSample: topRecommendations.slice(0, 5)
     });
   } catch (error) {
