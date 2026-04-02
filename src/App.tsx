@@ -443,8 +443,27 @@ function Dashboard() {
               <button 
                 onClick={async () => {
                   setLoading(prev => ({ ...prev, keywords: true }));
-                  await fetch('/api/collect-trends');
-                  await fetchTrendingKeywords();
+                  setError(prev => ({ ...prev, keywords: '' }));
+                  try {
+                    const response = await fetch('/api/collect-trends');
+                    const text = await response.text();
+                    let json;
+                    try {
+                      json = JSON.parse(text);
+                    } catch {
+                      throw new Error(`데이터 수집 응답 파싱 실패: ${text.slice(0, 150)}`);
+                    }
+
+                    if (!response.ok || !json.ok) {
+                      throw new Error(json.error || json.detail || `데이터 수집 실패 (상태 코드: ${response.status})`);
+                    }
+
+                    await fetchTrendingKeywords();
+                  } catch (err: any) {
+                    setError(prev => ({ ...prev, keywords: err.message }));
+                  } finally {
+                    setLoading(prev => ({ ...prev, keywords: false }));
+                  }
                 }}
                 disabled={loading.keywords}
                 className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-xs font-medium disabled:opacity-50"

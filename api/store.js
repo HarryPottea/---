@@ -121,19 +121,39 @@ const store = {
   },
 
   // Recommended Keywords
-  async getRecommendedKeywords() {
+  async getRecommendedKeywords(date = null) {
     if (!supabase) return [];
     try {
-      const { data, error } = await supabase
+      const targetDate = date || new Date().toISOString().slice(0, 10);
+      let query = supabase
         .from('recommended_keywords')
         .select('*')
+        .eq('date', targetDate)
         .order('recommendationScore', { ascending: false })
         .limit(10);
-      
+
+      let { data, error } = await query;
+
       if (error) {
         console.error("[STORE] getRecommendedKeywords error:", error.message);
         return [];
       }
+
+      if ((!data || data.length === 0) && !date) {
+        console.log(`[STORE] No recommendations for ${targetDate}, falling back to latest records`);
+        const fallback = await supabase
+          .from('recommended_keywords')
+          .select('*')
+          .order('updatedAt', { ascending: false })
+          .limit(10);
+
+        if (fallback.error) {
+          console.error("[STORE] getRecommendedKeywords fallback error:", fallback.error.message);
+          return [];
+        }
+        data = fallback.data || [];
+      }
+
       return data || [];
     } catch (e) {
       console.error("[STORE] getRecommendedKeywords error:", e.message);
@@ -143,14 +163,50 @@ const store = {
   async setRecommendedKeywords(keywords) {
     if (!supabase) return;
     try {
+      const rows = keywords.map(item => ({
+        ...item,
+        updatedAt: new Date().toISOString()
+      }));
+
+      const first = rows[0];
+      const hasDate = rows.every(item => !!item.date);
+
+      if (hasDate && first) {
+        const targetDate = first.date;
+        const existing = await supabase
+          .from('recommended_keywords')
+          .select('keyword, date')
+          .eq('date', targetDate);
+
+        if (existing.error) {
+          console.error("[STORE] setRecommendedKeywords existing-read error:", existing.error.message);
+        } else {
+          const incomingKeywords = new Set(rows.map(item => item.keyword));
+          const staleKeywords = (existing.data || [])
+            .map(item => item.keyword)
+            .filter(keyword => !incomingKeywords.has(keyword));
+
+          if (staleKeywords.length > 0) {
+            const del = await supabase
+              .from('recommended_keywords')
+              .delete()
+              .eq('date', targetDate)
+              .in('keyword', staleKeywords);
+
+            if (del.error) {
+              console.error("[STORE] setRecommendedKeywords cleanup error:", del.error.message);
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from('recommended_keywords')
-        .upsert(keywords.map(item => ({
-          ...item,
-          updatedAt: new Date().toISOString()
-        })), { onConflict: 'keyword' });
-      
-      if (error) console.error("[STORE] setRecommendedKeywords error:", error.message);
+        .upsert(rows, { onConflict: 'keyword' });
+
+      if (error) {
+        console.error("[STORE] setRecommendedKeywords error:", error.message);
+      }
     } catch (e) {
       console.error("[STORE] setRecommendedKeywords error:", e.message);
     }
