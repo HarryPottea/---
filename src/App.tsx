@@ -244,7 +244,11 @@ function Dashboard() {
         throw new Error("분석 결과 데이터가 올바르지 않습니다.");
       }
     } catch (err: any) {
-      setError(prev => ({ ...prev, google: err.message }));
+      const message = String(err?.message || '');
+      const friendlyMessage = message.includes('무료 호출 제한') || message.includes('429') || message.includes('RESOURCE_EXHAUSTED')
+        ? '무료 호출 제한입니다. 제한이 풀리면 노출될 예정입니다.'
+        : 'AI 인사이트를 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      setError(prev => ({ ...prev, google: friendlyMessage }));
     } finally {
       setLoading(prev => ({ ...prev, google: false }));
     }
@@ -430,7 +434,7 @@ function Dashboard() {
               <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-200">
                 Audience Insight Console
               </span>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">지금 사람들이 반응하는 관심사를, 기획 인사이트로.</h2>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">기획 인사이트 시스템</h2>
               <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
                 네이버 DataLab의 상대 관심도 흐름을 바탕으로 대중 관심사를 추적하고, 영화/콘텐츠 기획에 바로 쓸 수 있는 키워드를 큐레이션합니다.
               </p>
@@ -506,15 +510,18 @@ function Dashboard() {
             <div className="mb-6 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 md:grid-cols-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">트렌드 점수</p>
-                <p className="mt-1 leading-6">상대 관심도, 직전 대비 변화량, 최근 7일 평균 대비 상승폭을 조합한 내부 비교 점수입니다.</p>
+                <p className="mt-1 leading-6 whitespace-pre-line">상대 관심도, 직전 대비 변화량, 최근 7일
+평균 대비 상승폭을 조합한 내부 비교 점수입니다.</p>
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">상대 관심도</p>
-                <p className="mt-1 leading-6">네이버 DataLab이 제공하는 정규화 지표입니다. 실제 검색건수(raw volume)는 아닙니다.</p>
+                <p className="mt-1 leading-6 whitespace-pre-line">네이버 DataLab이 제공하는 정규화 지표입니다.
+실제 검색건수(raw volume)는 아닙니다.</p>
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">활용 포인트</p>
-                <p className="mt-1 leading-6">대중의 현재 관심사를 소재, 장르, 캐릭터, 톤앤매너 기획으로 번역하는 데 적합합니다.</p>
+                <p className="mt-1 leading-6 whitespace-pre-line">대중의 현재 관심사를 소재, 장르, 캐릭터,
+톤앤매너 기획으로 반영하는 데 적합합니다.</p>
               </div>
             </div>
 
