@@ -748,16 +748,8 @@ function Dashboard() {
                 </span>
               )}
               <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
-                Real-time Analysis
+                Curated Insight
               </span>
-              <button 
-                onClick={() => fetchGoogleInsight(keyword, true)}
-                disabled={loading.google}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                title="새로고침"
-              >
-                <RefreshCw className={cn("w-4 h-4 text-gray-500", loading.google && "animate-spin")} />
-              </button>
             </div>
           </div>
           <div className="p-4 sm:p-8">
