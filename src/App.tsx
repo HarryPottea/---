@@ -742,9 +742,17 @@ function Dashboard() {
               {insightSource && (
                 <span className={cn(
                   "text-[10px] sm:text-xs font-medium px-2 py-1 rounded-full",
-                  insightSource === 'cache' ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
+                  insightSource === 'cache'
+                    ? "bg-amber-100 text-amber-700"
+                    : insightSource.startsWith('fallback')
+                      ? "bg-slate-100 text-slate-700"
+                      : "bg-green-100 text-green-700"
                 )}>
-                  {insightSource === 'cache' ? "캐시된 인사이트" : "새 인사이트 생성"}
+                  {insightSource === 'cache'
+                    ? "캐시된 인사이트"
+                    : insightSource.startsWith('fallback')
+                      ? "대체 인사이트"
+                      : "새 인사이트 생성"}
                 </span>
               )}
               <span className="text-[10px] sm:text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
